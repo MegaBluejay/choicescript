@@ -1,0 +1,43 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.35.1.
+--
+-- see: https://github.com/sol/hpack
+
+name:           choicescript
+version:        0.1.0.0
+category:       Web
+homepage:       https://github.com/githubuser/choicescript#readme
+author:         Author name here
+maintainer:     example@example.com
+copyright:      2023 Author name here
+license:        BSD3
+build-type:     Simple
+
+library
+  exposed-modules:
+      AST
+      AST.Expr
+      AST.TH
+      Lexer
+      Parser
+      Parser.Expr
+  other-modules:
+      Paths_choicescript
+  hs-source-dirs:
+      src
+  default-extensions:
+      OverloadedStrings
+      LambdaCase
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing -Wno-unused-top-binds -Wno-missing-export-lists -Wno-unticked-promoted-constructors
+  build-depends:
+      base >=4.16 && <5
+    , bytestring
+    , generic-constraints
+    , hypertypes
+    , mtl
+    , parsers
+    , template-haskell
+    , trifecta
+    , unordered-containers
+  default-language: GHC2021

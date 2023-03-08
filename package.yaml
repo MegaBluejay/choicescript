@@ -1,0 +1,46 @@
+name:                choicescript
+version:             0.1.0.0
+#synopsis:
+#description:
+homepage:            https://github.com/githubuser/choicescript#readme
+license:             BSD3
+author:              Author name here
+maintainer:          example@example.com
+copyright:           2023 Author name here
+category:            Web
+
+dependencies:
+  - base >= 4.16 && < 5
+
+ghc-options:
+- -Wall
+- -Wcompat
+- -Widentities
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wmissing-export-lists
+- -Wmissing-home-modules
+- -Wpartial-fields
+- -Wredundant-constraints
+- -Wno-name-shadowing
+- -Wno-unused-top-binds
+- -Wno-missing-export-lists
+- -Wno-unticked-promoted-constructors
+
+default-extensions:
+  - OverloadedStrings
+  - LambdaCase
+
+language: GHC2021
+
+library:
+  source-dirs: src
+  dependencies:
+    - bytestring
+    - unordered-containers
+    - parsers
+    - trifecta
+    - hypertypes
+    - generic-constraints
+    - mtl
+    - template-haskell
