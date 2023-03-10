@@ -38,6 +38,9 @@ indented p = do
 mbIndented :: Parser a -> Parser a
 mbIndented p = indented p <|> p
 
+scene :: ParseSimple simple => Parser (PBody simple # Ann Loc)
+scene = PBody <$> withCaret line `sepEndBy` newline
+
 body :: ParseSimple simple => Parser (PBody simple # Ann Loc)
 body = PBody <$> withCaret line `sepBy` newline
 

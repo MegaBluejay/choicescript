@@ -44,3 +44,4 @@ library:
     - generic-constraints
     - mtl
     - template-haskell
+    - pretty-simple

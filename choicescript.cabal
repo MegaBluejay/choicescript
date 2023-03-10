@@ -37,6 +37,7 @@ library
     , hypertypes
     , mtl
     , parsers
+    , pretty-simple
     , template-haskell
     , trifecta
     , unordered-containers
