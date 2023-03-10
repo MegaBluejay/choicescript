@@ -7,6 +7,7 @@ module Parser where
 import Data.ByteString (ByteString)
 import Data.List.NonEmpty (some1)
 import Hyper
+import Text.Parser.Token.Highlight qualified as Highlight
 
 import AST
 import Lexer
@@ -44,18 +45,27 @@ scene = PBody <$> withCaret line `sepEndBy` newline
 body :: ParseSimple simple => Parser (PBody simple # Ann Loc)
 body = PBody <$> withCaret line `sepBy` newline
 
+star :: Parser ()
+star = void . highlight Highlight.ReservedIdentifier $ char '*'
+
 line :: ParseSimple simple => Parser (PLine simple # Ann Loc)
 line =
-  PFlat <$> flatLine
-    <|> PIf <$> pIf "if"
-    <|> PChoice <$> choice
+  (star *> command)
+    <|> PFlat
+      <$> ( EmptyLine <$ lookAhead (char '\n')
+              <|> Text <$> text
+          )
 
-flatLine :: ParseSimple simple => Parser (FlatLine simple # Ann Loc)
-flatLine =
+command :: ParseSimple simple => Parser (PLine simple # Ann Loc)
+command =
+  PIf <$> pIf "if"
+    <|> PChoice <$> choice
+    <|> PFlat <$> flatCommand
+
+flatCommand :: ParseSimple simple => Parser (FlatLine simple # Ann Loc)
+flatCommand =
   Simple <$> simple
     <|> cmd Label "label" <*> label
-    <|> EmptyLine <$ lookAhead (char '\n')
-    <|> Text <$> text
 
 text :: Parser (Ann Loc # Str)
 text = str <$> some (normal '\n' <|> special)
@@ -66,8 +76,10 @@ pIf q = cmd If q <*> expr <*> indented body <*> optional (newline *> withCaret p
 
 pElse :: ParseSimple simple => Parser (Else simple # Ann Loc)
 pElse =
-  Elseif <$> pIf "elseif"
-    <|> cmd Else "else" <*> indented body
+  star
+    *> ( Elseif <$> pIf "elseif"
+          <|> cmd Else "else" <*> indented body
+       )
 
 choice :: ParseSimple simple => Parser (Choice (PBody simple) # Ann Loc)
 choice = Choice <$> choiceMode <*> indented (withCaret option `sepByNonEmpty` newline)
@@ -78,7 +90,7 @@ choiceMode =
     <|> cmd FakeChoiceMode "fake_choice"
 
 option :: ParseSimple simple => Parser (Option (PBody simple) # Ann Loc)
-option = optional (withCaret optionMod) >>= maybe noMods addMod
+option = optional (withCaret $ star *> optionMod) >>= maybe noMods addMod
 
 noMods :: ParseSimple simple => Parser (Option (PBody simple) # Ann Loc)
 noMods = do

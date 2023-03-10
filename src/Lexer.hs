@@ -21,7 +21,7 @@ import Generics.Constraints
 import Hyper
 import Hyper.Recurse
 import Text.Parser.LookAhead
-import Text.Parser.Token.Highlight
+import Text.Parser.Token.Highlight qualified as Highlight
 import Text.Trifecta hiding (
   Parser,
   choice,
@@ -43,8 +43,8 @@ identStyle =
     , _styleStart = letter <|> char '_'
     , _styleLetter = alphaNum <|> char '_'
     , _styleReserved = HS.fromList ["false", "true", "and", "or", "not", "modulo"]
-    , _styleHighlight = Identifier
-    , _styleReservedHighlight = ReservedIdentifier
+    , _styleHighlight = Highlight.Identifier
+    , _styleReservedHighlight = Highlight.ReservedIdentifier
     }
 
 opStyle :: TokenParsing m => IdentifierStyle m
@@ -54,8 +54,8 @@ opStyle =
     , _styleStart = _styleLetter opStyle
     , _styleLetter = oneOf "+-*/%=!<>&#"
     , _styleReserved = HS.fromList ["+", "-", "*", "/", "%+", "%-", "=", "!=", "<", ">", "&", "#"]
-    , _styleHighlight = BadInput
-    , _styleReservedHighlight = ReservedOperator
+    , _styleHighlight = Highlight.BadInput
+    , _styleReservedHighlight = Highlight.ReservedOperator
     }
 
 cmdStyle :: TokenParsing m => IdentifierStyle m
@@ -66,37 +66,37 @@ cmdStyle =
     , _styleLetter = letter <|> char '_'
     , _styleReserved =
         HS.fromList
-          [ "*hide_reuse"
-          , "*temp"
-          , "*set"
-          , "*delete"
-          , "*input_number"
-          , "*input_text"
-          , "*print"
-          , "*rand"
-          , "*goto"
-          , "*goto_scene"
-          , "*gosub"
-          , "*gosub_scene"
-          , "*params"
-          , "*return"
-          , "*goto_random_scene"
-          , "*finish"
-          , "*line_break"
-          , "*page_break"
-          , "*link"
-          , "*stat_chart"
-          , "*achieve"
-          , "*check_achievements"
-          , "*ending"
-          , "*create"
-          , "*scene_list"
-          , "*title"
-          , "*author"
-          , "*achievement"
+          [ "hide_reuse"
+          , "temp"
+          , "set"
+          , "delete"
+          , "input_number"
+          , "input_text"
+          , "print"
+          , "rand"
+          , "goto"
+          , "goto_scene"
+          , "gosub"
+          , "gosub_scene"
+          , "params"
+          , "return"
+          , "goto_random_scene"
+          , "finish"
+          , "line_break"
+          , "page_break"
+          , "link"
+          , "stat_chart"
+          , "achieve"
+          , "check_achievements"
+          , "ending"
+          , "create"
+          , "scene_list"
+          , "title"
+          , "author"
+          , "achievement"
           ]
-    , _styleHighlight = Identifier
-    , _styleReservedHighlight = ReservedIdentifier
+    , _styleHighlight = Highlight.Identifier
+    , _styleReservedHighlight = Highlight.ReservedIdentifier
     }
 
 ident :: (TokenParsing m, Monad m, IsString s) => m s
@@ -112,7 +112,7 @@ op = Trifecta.reserve opStyle
 {-# INLINE op #-}
 
 cmd :: (TokenParsing m, Monad m) => a -> String -> m a
-cmd x c = x <$ Trifecta.reserve cmdStyle ("*" <> c)
+cmd x c = x <$ Trifecta.reserve cmdStyle c
 {-# INLINE cmd #-}
 
 someTill :: Alternative m => m a -> m end -> m [a]
