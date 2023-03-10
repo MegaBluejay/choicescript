@@ -69,3 +69,15 @@ newtype Var = V {getV :: ByteString}
   deriving (Show, Generic)
 
 makeAll [''StrPart, ''Str, ''Expr]
+
+instance RNodes StrPart
+instance (c StrPart, c Str, c Expr) => Recursively c StrPart
+instance RTraversable StrPart
+
+instance RNodes Str
+instance (c StrPart, c Str, c Expr) => Recursively c Str
+instance RTraversable Str
+
+instance RNodes Expr
+instance (c StrPart, c Str, c Expr) => Recursively c Expr
+instance RTraversable Expr

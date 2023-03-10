@@ -11,6 +11,7 @@ module AST (
 import Data.ByteString (ByteString)
 import Data.List.NonEmpty (NonEmpty)
 import Hyper
+import Hyper.Class.Recursive
 
 import AST.Expr
 import AST.TH
@@ -169,4 +170,88 @@ makeAll
   , ''CLine
   ]
 
--- makeDerivings [''Show] [''If, ''Else, ''OptionMod, ''Option, ''Choice, ''FlatLine, ''ParsedBody, ''ParsedLine, ''CompiledLoc, ''CompiledLine]
+instance RNodes simple => RNodes (FlatLine simple) where
+  {-# INLINE recursiveHNodes #-}
+  recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @simple) Dict
+instance (c (FlatLine simple), Recursively c Str, Recursively c simple) => Recursively c (FlatLine simple) where
+  {-# INLINE recursively #-}
+  recursively _ =
+    withDict (recursively $ Proxy @(c simple)) Dict
+
+instance RNodes simple => RNodes (PLine simple) where
+  {-# INLINE recursiveHNodes #-}
+  recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @simple) Dict
+instance (c (PLine simple), Recursively c (FlatLine simple), Recursively c (If simple), Recursively c (Choice (PBody simple)), RNodes simple) => Recursively c (PLine simple) where
+  {-# INLINE recursively #-}
+  recursively _ =
+    withDict (recursively $ Proxy @(c (FlatLine simple))) $
+      withDict (recursively $ Proxy @(c (If simple))) $
+        withDict (recursively $ Proxy @(c (Choice (PBody simple)))) Dict
+
+instance RNodes simple => RNodes (PBody simple)
+instance (c (PBody simple), Recursively c (PLine simple), RNodes simple) => Recursively c (PBody simple)
+
+instance RNodes simple => RNodes (If simple)
+instance (c (If simple), Recursively c (PBody simple), Recursively c (Else simple), RNodes simple) => Recursively c (If simple) where
+  {-# INLINE recursively #-}
+  recursively _ =
+    withDict (recursively $ Proxy @(c (PBody simple))) $
+      withDict (recursively $ Proxy @(c (Else simple))) Dict
+
+instance RNodes simple => RNodes (Else simple)
+instance (c (Else simple), Recursively c (If simple), Recursively c (PBody simple), RNodes simple) => Recursively c (Else simple) where
+  {-# INLINE recursively #-}
+  recursively _ =
+    withDict (recursively $ Proxy @(c (If simple))) $
+      withDict (recursively $ Proxy @(c (PBody simple))) Dict
+
+instance RNodes simple => RNodes (CLoc simple) where
+  {-# INLINE recursiveHNodes #-}
+  recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @simple) Dict
+instance (c (CLoc simple), Recursively c (FlatLine simple), Recursively c Expr, Recursively c (Choice (Const Int)), RNodes simple) => Recursively c (CLoc simple) where
+  {-# INLINE recursively #-}
+  recursively _ =
+    withDict (recursively $ Proxy @(c (FlatLine simple))) $
+      withDict (recursively $ Proxy @(c Expr)) $
+        withDict (recursively $ Proxy @(c (Choice (Const Int)))) Dict
+
+instance RNodes simple => RNodes (CLine simple)
+instance (c (CLine simple), Recursively c (CLoc simple), RNodes simple) => Recursively c (CLine simple)
+
+instance RNodes body => RNodes (Choice body)
+instance (c (Choice body), Recursively c (Option body), RNodes body) => Recursively c (Choice body)
+
+instance RNodes body => RNodes (Option body) where
+  {-# INLINE recursiveHNodes #-}
+  recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @body) Dict
+instance (c (Option body), Recursively c OptionMod, Recursively c Str, Recursively c body) => Recursively c (Option body) where
+  {-# INLINE recursively #-}
+  recursively _ =
+    withDict (recursively $ Proxy @(c body)) Dict
+
+instance RNodes OptionMod
+instance (c OptionMod, Recursively c Expr) => Recursively c OptionMod
+
+instance RNodes StartupSimpleCommand
+instance (c StartupSimpleCommand, Recursively c Expr, Recursively c Str, Recursively c AchData, Recursively c SimpleCommand) => Recursively c StartupSimpleCommand
+
+instance RNodes AchData
+instance (c AchData, Recursively c Str) => Recursively c AchData
+
+instance RNodes SimpleCommand
+instance (c SimpleCommand, Recursively c Expr, Recursively c (Target Var), Recursively c SetExpr, Recursively c (Target Label), Recursively c SubArgs, Recursively c Str) => Recursively c SimpleCommand
+
+instance RNodes SubArgs
+instance (c SubArgs, Recursively c (Target Label), Recursively c Expr) => Recursively c SubArgs
+
+instance RNodes (Target a)
+instance (c (Target a), Recursively c Expr) => Recursively c (Target a)
+
+instance RNodes SetExpr
+instance (c SetExpr, Recursively c Expr) => Recursively c SetExpr
+
+pBodyWitness :: Dict (Recursively HFunctor (PBody StartupSimpleCommand))
+pBodyWitness = Dict
+
+cLineWitness :: Dict (Recursively HFunctor (CLine StartupSimpleCommand))
+cLineWitness = Dict

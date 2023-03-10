@@ -19,6 +19,7 @@ import Data.HashSet qualified as HS
 import Data.String
 import Generics.Constraints
 import Hyper
+import Hyper.Recurse
 import Text.Parser.LookAhead
 import Text.Parser.Token.Highlight
 import Text.Trifecta hiding (
@@ -169,5 +170,8 @@ int = fromInteger <$> token decimal
 
 unwrapParser :: Parser a -> Trifecta.Parser a
 unwrapParser = runUnlined . runMUnlined . flip evalStateT 0
+
+deAnn :: Recursively HFunctor h => Ann a # h -> Pure # h
+deAnn = unwrap $ \_ (Ann _ x) -> x
 
 makeDerivings [''Show] [''Loc]
