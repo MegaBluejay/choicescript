@@ -45,3 +45,7 @@ library:
     - mtl
     - template-haskell
     - pretty-simple
+    - dlist
+    - hashable
+    - vector
+    - transformers

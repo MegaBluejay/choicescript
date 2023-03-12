@@ -19,6 +19,7 @@ library
       AST
       AST.Expr
       AST.TH
+      Compiler
       Lexer
       Parser
       Parser.Expr
@@ -33,12 +34,16 @@ library
   build-depends:
       base >=4.16 && <5
     , bytestring
+    , dlist
     , generic-constraints
+    , hashable
     , hypertypes
     , mtl
     , parsers
     , pretty-simple
     , template-haskell
+    , transformers
     , trifecta
     , unordered-containers
+    , vector
   default-language: GHC2021

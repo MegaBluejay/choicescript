@@ -9,6 +9,7 @@ module AST (
 ) where
 
 import Data.ByteString (ByteString)
+import Data.Hashable
 import Data.List.NonEmpty (NonEmpty)
 import Hyper
 import Hyper.Class.Recursive
@@ -143,7 +144,7 @@ data SetExpr h
   deriving (Generic)
 
 newtype Label = L {getL :: ByteString}
-  deriving (Show, Generic)
+  deriving (Show, Eq, Hashable, Generic)
 
 newtype SceneName = SN {getSN :: ByteString}
   deriving (Show, Generic)
