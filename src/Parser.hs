@@ -2,7 +2,10 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Parser where
+module Parser (
+  module Parser,
+  module Lexer,
+) where
 
 import Data.ByteString (ByteString)
 import Data.List.NonEmpty (some1)
@@ -20,7 +23,7 @@ type instance LocType (Else simple) = Caret
 
 indent :: Parser ()
 indent =
-  lookAhead (void (char '\n') <|> eof) <|> do
+  lookAhead (void $ char '\n') <|> do
     n <- get
     replicateM_ n $ char ' '
 
@@ -39,8 +42,8 @@ indented p = do
 mbIndented :: Parser a -> Parser a
 mbIndented p = indented p <|> p
 
-scene :: ParseSimple simple => Parser (PBody simple # Ann Loc)
-scene = PBody <$> withCaret line `sepEndBy` newline
+scene :: ParseSimple simple => Parser [Ann Loc # PLine simple]
+scene = withCaret line `sepEndBy` newline
 
 body :: ParseSimple simple => Parser (PBody simple # Ann Loc)
 body = PBody <$> withCaret line `sepBy` newline
@@ -50,11 +53,13 @@ star = void . highlight Highlight.ReservedIdentifier $ char '*'
 
 line :: ParseSimple simple => Parser (PLine simple # Ann Loc)
 line =
-  (star *> command)
-    <|> PFlat
-      <$> ( EmptyLine <$ lookAhead (char '\n')
-              <|> Text <$> text
-          )
+  notFollowedBy (char ' ')
+    *> ( (star *> command)
+          <|> PFlat
+            <$> ( EmptyLine <$ lookAhead (char '\n')
+                    <|> Text <$> text
+                )
+       )
 
 command :: ParseSimple simple => Parser (PLine simple # Ann Loc)
 command =
@@ -71,7 +76,7 @@ text :: Parser (Ann Loc # Str)
 text = str <$> some (normal '\n' <|> special)
 
 pIf :: ParseSimple simple => String -> Parser (If simple # Ann Loc)
-pIf q = cmd If q <*> expr <*> indented body <*> optional (newline *> withCaret pElse)
+pIf q = cmd If q <*> expr <*> indented body <*> optional (try $ newline *> withCaret pElse)
 {-# INLINE pIf #-}
 
 pElse :: ParseSimple simple => Parser (Else simple # Ann Loc)

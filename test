@@ -1,2 +1,7 @@
-thing
-thing2
+*if test
+  first
+*elseif test2
+  second
+*else
+  third
+other
