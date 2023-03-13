@@ -6,6 +6,7 @@
 module AST.Expr where
 
 import Data.ByteString (ByteString)
+import Data.Hashable
 import Data.List.NonEmpty (NonEmpty)
 import Hyper
 
@@ -66,7 +67,7 @@ data Fun
   deriving (Show, Generic)
 
 newtype Var = V {getV :: ByteString}
-  deriving (Show, Generic)
+  deriving (Show, Eq, Hashable, Generic)
 
 makeAll [''StrPart, ''Str, ''Expr]
 
