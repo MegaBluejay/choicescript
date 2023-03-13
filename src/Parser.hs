@@ -153,11 +153,6 @@ instance ParseSimple StartupSimpleCommand where
       <|> cmd Achievement "achievement" <*> achievement <*> achData
       <|> NormalSimple <$> simple
 
-target :: Parser a -> Parser (Target a # Ann Loc)
-target p =
-  RefTarget <$ symbolic '{' <*> expr <* symbolic '}'
-    <|> DirectTarget <$> p
-
 setExpr :: Parser (SetExpr # Ann Loc)
 setExpr =
   ModSet <$> binOp <*> expr

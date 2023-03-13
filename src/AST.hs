@@ -133,11 +133,6 @@ data Stat
   | OpposedStat NamedStat ByteString
   deriving (Show, Generic)
 
-data Target a h
-  = DirectTarget a
-  | RefTarget (h :# Expr)
-  deriving (Generic)
-
 data SetExpr h
   = NormalSet (h :# Expr)
   | ModSet BinOp (h :# Expr)
@@ -165,7 +160,6 @@ makeAll
   , ''AchData
   , ''SimpleCommand
   , ''SubArgs
-  , ''Target
   , ''SetExpr
   , ''CLoc
   , ''CLine
@@ -232,9 +226,6 @@ instance (c SimpleCommand, c StrPart, c Str, c Expr) => Recursively c SimpleComm
 
 instance RNodes SubArgs
 instance (c SubArgs, c StrPart, c Str, c Expr) => Recursively c SubArgs
-
-instance RNodes (Target a)
-instance (c (Target a), c StrPart, c Str, c Expr) => Recursively c (Target a)
 
 instance RNodes SetExpr
 instance (c SetExpr, c StrPart, c Str, c Expr) => Recursively c SetExpr

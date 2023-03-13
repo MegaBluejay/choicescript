@@ -15,6 +15,11 @@ import Lexer
 type instance LocType Expr = Span
 type instance LocType Str = ()
 
+target :: Parser a -> Parser (Target a # Ann Loc)
+target p =
+  RefTarget <$ symbolic '{' <*> expr <* symbolic '}'
+    <|> DirectTarget <$> p
+
 var :: Parser Var
 var = V <$> ident
 
@@ -100,7 +105,7 @@ term =
     ( Constant <$> constant
         <|> Str <$> strLit
         <|> Fun <$> try (fun <* symbolic '(') <*> expr <* symbolic ')'
-        <|> Var <$> var
+        <|> Var <$> target var
     )
     <|> symbolic '(' *> expr <* symbolic ')'
 

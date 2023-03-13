@@ -12,10 +12,15 @@ import Hyper
 
 import AST.TH
 
+data Target a h
+  = DirectTarget a
+  | RefTarget (h :# Expr)
+  deriving (Generic)
+
 data Expr h
   = Constant Constant
   | Str (h :# Str)
-  | Var Var
+  | Var (Target Var h)
   | UnOp UnOp (h :# Expr)
   | BinOp (h :# Expr) BinOp (h :# Expr)
   | Fun Fun (h :# Expr)
@@ -69,7 +74,11 @@ data Fun
 newtype Var = V {getV :: ByteString}
   deriving (Show, Eq, Hashable, Generic)
 
-makeAll [''StrPart, ''Str, ''Expr]
+makeAll [''Target, ''StrPart, ''Str, ''Expr]
+
+instance RNodes (Target a)
+instance (c (Target a), c StrPart, c Str, c Expr) => Recursively c (Target a)
+instance RTraversable (Target a)
 
 instance RNodes StrPart
 instance (c StrPart, c Str, c Expr) => Recursively c StrPart
