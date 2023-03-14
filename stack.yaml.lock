@@ -15,6 +15,20 @@ packages:
   original:
     commit: 0ec0aa2a7fb6af4bb70727d7ee590bcc02b607ed
     git: https://github.com/lamdu/hypertypes.git
+- completed:
+    hackage: exinst-0.9@sha256:f211026788df975db7e79f1104238e9dcb24fd9df663df1d8aa10ff398a574ba,1024
+    pantry-tree:
+      sha256: 7c5f992b22296a6d9977c615c391b88f2ef02e709673acef2ea53b7a14f5f134
+      size: 718
+  original:
+    hackage: exinst-0.9
+- completed:
+    hackage: exinst-base-0.9@sha256:ead6135195edddc6d30f5586b682d676a876644fe3c1bf001f0d774d890b8584,1124
+    pantry-tree:
+      sha256: b30ca82d4f54a38a93956f589d37a4357f62cb9e2fff0d96dc36ed8854cc3a21
+      size: 329
+  original:
+    hackage: exinst-base-0.9
 snapshots:
 - completed:
     sha256: af5d667f6096e535b9c725a72cffe0f6c060e0568d9f9eeda04caee70d0d9d2d

@@ -23,6 +23,7 @@ library
       Lexer
       Parser
       Parser.Expr
+      Runner
   other-modules:
       Paths_choicescript
   hs-source-dirs:
@@ -35,12 +36,16 @@ library
       base >=4.16 && <5
     , bytestring
     , dlist
+    , exinst
+    , exinst-base
     , generic-constraints
     , hashable
     , hypertypes
     , mtl
     , parsers
     , pretty-simple
+    , singletons
+    , singletons-base
     , template-haskell
     , transformers
     , trifecta

@@ -1,7 +1,1 @@
-*if test
-  first
-*elseif test2
-  second
-*else
-  third
-other
+1 + y

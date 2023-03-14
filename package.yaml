@@ -49,3 +49,7 @@ library:
     - hashable
     - vector
     - transformers
+    - singletons
+    - singletons-base
+    - exinst
+    - exinst-base
