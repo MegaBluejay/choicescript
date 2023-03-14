@@ -72,7 +72,7 @@ flatCommand =
   Simple <$> simple
     <|> cmd Label "label" <*> label
 
-text :: Parser (Ann Loc # Str)
+text :: Parser (Str # Ann Loc)
 text = str <$> some (normal '\n' <|> special)
 
 pIf :: ParseSimple simple => String -> Parser (If simple # Ann Loc)

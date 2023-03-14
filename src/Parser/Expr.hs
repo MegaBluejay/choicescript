@@ -14,7 +14,6 @@ import Lexer
 
 type instance LocType Expr = Span
 type instance LocType Multirep = Span
-type instance LocType Str = ()
 
 target :: Parser a -> Parser (Target a # Ann Loc)
 target p =
@@ -59,10 +58,10 @@ escapedChar = C.singleton <$ char '\\' <*> anyChar
 someNormals :: Char -> Parser ByteString
 someNormals end = sliced . skipSome $ notFollowedBy special *> normalChar end
 
-str :: [StrPart # Ann Loc] -> Ann Loc # Str
-str = Ann (Loc ()) . S . compress
+str :: [StrPart # Ann Loc] -> Str # Ann Loc
+str = S . compress
 
-strLit :: Parser (Ann Loc # Str)
+strLit :: Parser (Str # Ann Loc)
 strLit = str <$ char '"' <*> many (normal '"' <|> special) <* char '"'
 
 compress :: [StrPart h] -> [StrPart h]
