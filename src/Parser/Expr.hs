@@ -96,9 +96,7 @@ binOp =
     <|> Cat <$ op "&"
 
 fun :: Parser Fun
-fun =
-  Round <$ string "round"
-    <|> Length <$ string "length"
+fun = Length <$ string "length"
 
 term :: Parser (Ann Loc # Expr)
 term =

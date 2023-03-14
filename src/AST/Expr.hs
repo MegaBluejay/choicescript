@@ -71,8 +71,7 @@ data BinOp
   deriving (Show, Generic)
 
 data Fun
-  = Round
-  | Length
+  = Length
   deriving (Show, Generic)
 
 newtype Var = V {getV :: ByteString}
