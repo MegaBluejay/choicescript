@@ -13,6 +13,7 @@ import AST.Expr
 import Lexer
 
 type instance LocType Expr = Span
+type instance LocType Multirep = Span
 type instance LocType Str = ()
 
 target :: Parser a -> Parser (Target a # Ann Loc)
@@ -39,12 +40,12 @@ capMode =
     <|> Cap <$ string "!"
     <|> pure NoCap
 
-multirep :: Parser (StrPart # Ann Loc)
+multirep :: Parser (Multirep # Ann Loc)
 multirep =
   Multirep <$ symbol "@{" <*> term <*> strLit `sepByNonEmpty` symbolic '|' <* char '}'
 
 special :: Parser (StrPart # Ann Loc)
-special = inter <|> multirep
+special = inter <|> SPMultirep <$> withSpan multirep
 
 normal :: Char -> Parser (StrPart # Ann Loc)
 normal end = Normal <$> (escapedChar <|> someNormals end)

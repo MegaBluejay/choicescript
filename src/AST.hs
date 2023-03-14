@@ -168,7 +168,7 @@ makeAll
 instance RNodes simple => RNodes (FlatLine simple) where
   {-# INLINE recursiveHNodes #-}
   recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @simple) Dict
-instance (c (FlatLine simple), c StrPart, c Str, c Expr, Recursively c simple) => Recursively c (FlatLine simple) where
+instance (c (FlatLine simple), c StrPart, c Str, c Expr, c Multirep, Recursively c simple) => Recursively c (FlatLine simple) where
   {-# INLINE recursively #-}
   recursively _ =
     withDict (recursively $ Proxy @(c simple)) Dict
@@ -176,59 +176,59 @@ instance (c (FlatLine simple), c StrPart, c Str, c Expr, Recursively c simple) =
 instance RNodes simple => RNodes (PLine simple) where
   {-# INLINE recursiveHNodes #-}
   recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @simple) Dict
-instance (c (PLine simple), c (If simple), c (Else simple), c (PBody simple), c (Option (PBody simple)), c OptionMod, c StrPart, c Str, c Expr, Recursively c simple) => Recursively c (PLine simple) where
+instance (c (PLine simple), c (If simple), c (Else simple), c (PBody simple), c (Option (PBody simple)), c OptionMod, c StrPart, c Str, c Expr, c Multirep, Recursively c simple) => Recursively c (PLine simple) where
   {-# INLINE recursively #-}
   recursively _ =
     withDict (recursively $ Proxy @(c simple)) Dict
 
 instance RNodes simple => RNodes (PBody simple)
-instance (c (PBody simple), c (PLine simple), c (If simple), c (Else simple), c (Option (PBody simple)), c OptionMod, c StrPart, c Str, c Expr, Recursively c simple) => Recursively c (PBody simple)
+instance (c (PBody simple), c (PLine simple), c (If simple), c (Else simple), c (Option (PBody simple)), c OptionMod, c StrPart, c Str, c Expr, c Multirep, Recursively c simple) => Recursively c (PBody simple)
 
 instance RNodes simple => RNodes (If simple)
-instance (c (If simple), c (PLine simple), c (Else simple), c (PBody simple), c (Option (PBody simple)), c OptionMod, c StrPart, c Str, c Expr, Recursively c simple) => Recursively c (If simple)
+instance (c (If simple), c (PLine simple), c (Else simple), c (PBody simple), c (Option (PBody simple)), c OptionMod, c StrPart, c Str, c Expr, c Multirep, Recursively c simple) => Recursively c (If simple)
 
 instance RNodes simple => RNodes (Else simple)
-instance (c (Else simple), c (PLine simple), c (If simple), c (PBody simple), c (Option (PBody simple)), c OptionMod, c StrPart, c Str, c Expr, Recursively c simple) => Recursively c (Else simple)
+instance (c (Else simple), c (PLine simple), c (If simple), c (PBody simple), c (Option (PBody simple)), c OptionMod, c StrPart, c Str, c Expr, c Multirep, Recursively c simple) => Recursively c (Else simple)
 
 instance RNodes simple => RNodes (CLoc simple) where
   {-# INLINE recursiveHNodes #-}
   recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @simple) Dict
-instance (c (CLoc simple), c (Option (Const Int)), c OptionMod, c StrPart, c Str, c Expr, c (Const Int), Recursively c simple) => Recursively c (CLoc simple) where
+instance (c (CLoc simple), c (Option (Const Int)), c OptionMod, c StrPart, c Str, c Expr, c (Const Int), c Multirep, Recursively c simple) => Recursively c (CLoc simple) where
   {-# INLINE recursively #-}
   recursively _ =
     withDict (recursively $ Proxy @(c simple)) Dict
 
 instance RNodes simple => RNodes (CLine simple)
-instance (c (CLine simple), c (CLoc simple), c (Option (Const Int)), c OptionMod, c StrPart, c Str, c Expr, c (Const Int), Recursively c simple) => Recursively c (CLine simple)
+instance (c (CLine simple), c (CLoc simple), c (Option (Const Int)), c OptionMod, c StrPart, c Str, c Expr, c Multirep, c (Const Int), Recursively c simple) => Recursively c (CLine simple)
 
 instance RNodes body => RNodes (Choice body)
-instance (c (Choice body), c (Option body), c OptionMod, c StrPart, c Str, c Expr, Recursively c body) => Recursively c (Choice body)
+instance (c (Choice body), c (Option body), c OptionMod, c StrPart, c Str, c Expr, c Multirep, Recursively c body) => Recursively c (Choice body)
 
 instance RNodes body => RNodes (Option body) where
   {-# INLINE recursiveHNodes #-}
   recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @body) Dict
-instance (c (Option body), c OptionMod, c StrPart, c Str, c Expr, Recursively c body) => Recursively c (Option body) where
+instance (c (Option body), c OptionMod, c StrPart, c Str, c Expr, c Multirep, Recursively c body) => Recursively c (Option body) where
   {-# INLINE recursively #-}
   recursively _ =
     withDict (recursively $ Proxy @(c body)) Dict
 
 instance RNodes OptionMod
-instance (c OptionMod, c StrPart, c Str, c Expr) => Recursively c OptionMod
+instance (c OptionMod, c StrPart, c Str, c Expr, c Multirep) => Recursively c OptionMod
 
 instance RNodes StartupSimpleCommand
-instance (c StartupSimpleCommand, c StrPart, c Str, c Expr) => Recursively c StartupSimpleCommand
+instance (c StartupSimpleCommand, c StrPart, c Str, c Expr, c Multirep) => Recursively c StartupSimpleCommand
 
 instance RNodes AchData
-instance (c AchData, c StrPart, c Str, c Expr) => Recursively c AchData
+instance (c AchData, c StrPart, c Str, c Expr, c Multirep) => Recursively c AchData
 
 instance RNodes SimpleCommand
-instance (c SimpleCommand, c StrPart, c Str, c Expr) => Recursively c SimpleCommand
+instance (c SimpleCommand, c StrPart, c Str, c Expr, c Multirep) => Recursively c SimpleCommand
 
 instance RNodes SubArgs
-instance (c SubArgs, c StrPart, c Str, c Expr) => Recursively c SubArgs
+instance (c SubArgs, c StrPart, c Str, c Expr, c Multirep) => Recursively c SubArgs
 
 instance RNodes SetExpr
-instance (c SetExpr, c StrPart, c Str, c Expr) => Recursively c SetExpr
+instance (c SetExpr, c StrPart, c Str, c Expr, c Multirep) => Recursively c SetExpr
 
 pBodyWitness :: Dict (Recursively HFunctor (PBody StartupSimpleCommand))
 pBodyWitness = Dict
