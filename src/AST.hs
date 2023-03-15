@@ -44,13 +44,13 @@ data Else simple h
 
 data CLoc simple h
   = CFlat (FlatLine simple h)
-  | JumpUnless (h :# Expr) Int
-  | CChoice (Choice (Const Int) h)
+  | JumpUnless (h :# Expr) Pos
+  | CChoice (Choice (Const Pos) h)
   deriving (Generic)
 
 data CLine simple h
   = CLoc (h :# CLoc simple)
-  | ImplicitJump Int
+  | ImplicitJump Pos
   deriving (Generic)
 
 data Choice body h
@@ -147,6 +147,9 @@ newtype SceneName = SN {getSN :: ByteString}
 newtype Achievement = A {getA :: ByteString}
   deriving (Show, Generic)
 
+newtype Pos = P {getP :: Int}
+  deriving (Show, Eq, Generic)
+
 makeAll
   [ ''FlatLine
   , ''PLine
@@ -204,7 +207,7 @@ instance RTraversable simple => RTraversable (Else simple)
 instance RNodes simple => RNodes (CLoc simple) where
   {-# INLINE recursiveHNodes #-}
   recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @simple) Dict
-instance (c (CLoc simple), c (Option (Const Int)), c OptionMod, c Expr, c (Const Int), c Multirep, Recursively c simple) => Recursively c (CLoc simple) where
+instance (c (CLoc simple), c (Option (Const Pos)), c OptionMod, c Expr, c (Const Pos), c Multirep, Recursively c simple) => Recursively c (CLoc simple) where
   {-# INLINE recursively #-}
   recursively _ =
     withDict (recursively $ Proxy @(c simple)) Dict
@@ -214,7 +217,7 @@ instance RTraversable simple => RTraversable (CLoc simple) where
     withDict (recursiveHTraversable $ Proxy @simple) Dict
 
 instance RNodes simple => RNodes (CLine simple)
-instance (c (CLine simple), c (CLoc simple), c (Option (Const Int)), c OptionMod, c Expr, c Multirep, c (Const Int), Recursively c simple) => Recursively c (CLine simple)
+instance (c (CLine simple), c (CLoc simple), c (Option (Const Pos)), c OptionMod, c Expr, c Multirep, c (Const Pos), Recursively c simple) => Recursively c (CLine simple)
 instance RTraversable simple => RTraversable (CLine simple)
 
 instance RNodes body => RNodes (Choice body)
