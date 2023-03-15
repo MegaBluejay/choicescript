@@ -176,19 +176,19 @@ instance (c (FlatLine simple), c Expr, c Multirep, Recursively c simple) => Recu
 instance RNodes simple => RNodes (PLine simple) where
   {-# INLINE recursiveHNodes #-}
   recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @simple) Dict
-instance (c (PLine simple), c (If simple), c (Else simple), c (PBody simple), c (Option (PBody simple)), c OptionMod, c Expr, c Multirep, Recursively c simple) => Recursively c (PLine simple) where
+instance (c (PLine simple), c (Else simple), c (PBody simple), c (Option (PBody simple)), c OptionMod, c Expr, c Multirep, Recursively c simple) => Recursively c (PLine simple) where
   {-# INLINE recursively #-}
   recursively _ =
     withDict (recursively $ Proxy @(c simple)) Dict
 
 instance RNodes simple => RNodes (PBody simple)
-instance (c (PBody simple), c (PLine simple), c (If simple), c (Else simple), c (Option (PBody simple)), c OptionMod, c Expr, c Multirep, Recursively c simple) => Recursively c (PBody simple)
+instance (c (PBody simple), c (PLine simple), c (Else simple), c (Option (PBody simple)), c OptionMod, c Expr, c Multirep, Recursively c simple) => Recursively c (PBody simple)
 
 instance RNodes simple => RNodes (If simple)
 instance (c (If simple), c (PLine simple), c (Else simple), c (PBody simple), c (Option (PBody simple)), c OptionMod, c Expr, c Multirep, Recursively c simple) => Recursively c (If simple)
 
 instance RNodes simple => RNodes (Else simple)
-instance (c (Else simple), c (PLine simple), c (If simple), c (PBody simple), c (Option (PBody simple)), c OptionMod, c Expr, c Multirep, Recursively c simple) => Recursively c (Else simple)
+instance (c (Else simple), c (PLine simple), c (PBody simple), c (Option (PBody simple)), c OptionMod, c Expr, c Multirep, Recursively c simple) => Recursively c (Else simple)
 
 instance RNodes simple => RNodes (CLoc simple) where
   {-# INLINE recursiveHNodes #-}
