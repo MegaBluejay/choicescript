@@ -162,6 +162,7 @@ someVal _ = some1 . Val @t
 (.:.) = (.) . (.:)
 
 infixr 8 .:
+infixr 8 .:.
 
 arith :: MonadEval m => (Int -> Int -> Int) -> Some1 Val -> Some1 Val -> m (Some1 Val)
 arith = fmap (someVal SIntTy) .:. apply2 SIntTy SIntTy
