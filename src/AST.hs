@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -61,7 +62,8 @@ data ChoiceMode = ChoiceMode | FakeChoiceMode
   deriving (Generic, Eq, Ord, Show)
 
 data Option body h = Option
-  { optionMods :: [h :# OptionMod]
+  { optionId :: Int
+  , optionMods :: [h :# OptionMod]
   , optionText :: Str h
   , optionBody :: body h
   }
@@ -148,7 +150,8 @@ newtype Achievement = A {getA :: ByteString}
   deriving (Show, Generic)
 
 newtype Pos = P {getP :: Int}
-  deriving (Show, Eq, Generic)
+  deriving (Show, Generic)
+  deriving newtype (Eq, Ord, Enum, Num)
 
 makeAll
   [ ''FlatLine

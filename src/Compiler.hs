@@ -109,7 +109,7 @@ compChoice (Ann (Loc loc) (Choice cm opts)) = mdo
   pure ()
 
 compOption :: Pos -> Ann Loc # Option (PBody simple) -> CompM simple (Ann Loc # Option (Const Pos))
-compOption end (Ann (Loc loc) (Option ms t b)) = do
+compOption end (Ann (Loc loc) (Option xid ms t b)) = do
   pos <- getPos
   compBody end b
-  pure $ Ann (Loc loc) (Option ms t (Const pos))
+  pure $ Ann (Loc loc) (Option xid ms t (Const pos))

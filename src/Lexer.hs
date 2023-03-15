@@ -31,6 +31,7 @@ import Text.Trifecta hiding (
   option,
   reserve,
   reserveText,
+  tab,
   text,
  )
 import Text.Trifecta qualified as Trifecta
@@ -129,7 +130,12 @@ withSpan p = (\s l a e -> Ann (Loc $ Span s e l) a) <$> position <*> Trifecta.li
 withCaret :: (LocType h ~ Caret, DeltaParsing m) => m (h # Ann Loc) -> m (Ann Loc # h)
 withCaret p = (\m l a -> Ann (Loc $ Caret m l) a) <$> position <*> Trifecta.line <*> p
 
-type Parser = StateT Int (MUnlined Trifecta.Parser)
+data ParseState = ParseState
+  { tab :: Int
+  , nOpts :: Int
+  }
+
+type Parser = StateT ParseState (MUnlined Trifecta.Parser)
 
 newtype MUnlined m a = MUnlined {runMUnlined :: Unlined m a}
   deriving newtype
@@ -169,7 +175,7 @@ int :: Parser Int
 int = fromInteger <$> token decimal
 
 unwrapParser :: Parser a -> Trifecta.Parser a
-unwrapParser = runUnlined . runMUnlined . flip evalStateT 0
+unwrapParser = runUnlined . runMUnlined . flip evalStateT (ParseState 0 0)
 
 deAnn :: Recursively HFunctor h => Ann a # h -> Pure # h
 deAnn = unwrap $ \_ (Ann _ x) -> x

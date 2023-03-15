@@ -24,7 +24,7 @@ type instance LocType (Else simple) = Caret
 indent :: Parser ()
 indent =
   lookAhead (void $ char '\n') <|> do
-    n <- get
+    n <- gets tab
     replicateM_ n $ char ' '
 
 newline :: Parser ()
@@ -34,7 +34,7 @@ indented :: Parser a -> Parser a
 indented p = do
   newline
   save <- get
-  skipSome $ char ' ' *> modify succ
+  skipSome $ char ' ' *> modify (\st -> st{tab = tab st + 1})
   res <- p
   put save
   pure res
@@ -97,8 +97,12 @@ choiceMode =
 option :: ParseSimple simple => Parser (Option (PBody simple) # Ann Loc)
 option = optional (withCaret $ star *> optionMod) >>= maybe noMods addMod
 
+nextOptionId :: Parser Int
+nextOptionId = state $ \st -> let new = nOpts st + 1 in (new, st{nOpts = new})
+
 noMods :: ParseSimple simple => Parser (Option (PBody simple) # Ann Loc)
 noMods = do
+  optionId <- nextOptionId
   optionText <- text
   optionBody <- indented body
   pure $ Option{optionMods = [], ..}
