@@ -172,6 +172,10 @@ instance (c (FlatLine simple), c Expr, c Multirep, Recursively c simple) => Recu
   {-# INLINE recursively #-}
   recursively _ =
     withDict (recursively $ Proxy @(c simple)) Dict
+instance RTraversable simple => RTraversable (FlatLine simple) where
+  {-# INLINE recursiveHTraversable #-}
+  recursiveHTraversable _ =
+    withDict (recursiveHTraversable $ Proxy @simple) Dict
 
 instance RNodes simple => RNodes (PLine simple) where
   {-# INLINE recursiveHNodes #-}
@@ -180,15 +184,22 @@ instance (c (PLine simple), c (Else simple), c (PBody simple), c (Option (PBody 
   {-# INLINE recursively #-}
   recursively _ =
     withDict (recursively $ Proxy @(c simple)) Dict
+instance RTraversable simple => RTraversable (PLine simple) where
+  {-# INLINE recursiveHTraversable #-}
+  recursiveHTraversable _ =
+    withDict (recursiveHTraversable $ Proxy @simple) Dict
 
 instance RNodes simple => RNodes (PBody simple)
 instance (c (PBody simple), c (PLine simple), c (Else simple), c (Option (PBody simple)), c OptionMod, c Expr, c Multirep, Recursively c simple) => Recursively c (PBody simple)
+instance RTraversable simple => RTraversable (PBody simple)
 
 instance RNodes simple => RNodes (If simple)
 instance (c (If simple), c (PLine simple), c (Else simple), c (PBody simple), c (Option (PBody simple)), c OptionMod, c Expr, c Multirep, Recursively c simple) => Recursively c (If simple)
+instance RTraversable simple => RTraversable (If simple)
 
 instance RNodes simple => RNodes (Else simple)
 instance (c (Else simple), c (PLine simple), c (PBody simple), c (Option (PBody simple)), c OptionMod, c Expr, c Multirep, Recursively c simple) => Recursively c (Else simple)
+instance RTraversable simple => RTraversable (Else simple)
 
 instance RNodes simple => RNodes (CLoc simple) where
   {-# INLINE recursiveHNodes #-}
@@ -197,12 +208,18 @@ instance (c (CLoc simple), c (Option (Const Int)), c OptionMod, c Expr, c (Const
   {-# INLINE recursively #-}
   recursively _ =
     withDict (recursively $ Proxy @(c simple)) Dict
+instance RTraversable simple => RTraversable (CLoc simple) where
+  {-# INLINE recursiveHTraversable #-}
+  recursiveHTraversable _ =
+    withDict (recursiveHTraversable $ Proxy @simple) Dict
 
 instance RNodes simple => RNodes (CLine simple)
 instance (c (CLine simple), c (CLoc simple), c (Option (Const Int)), c OptionMod, c Expr, c Multirep, c (Const Int), Recursively c simple) => Recursively c (CLine simple)
+instance RTraversable simple => RTraversable (CLine simple)
 
 instance RNodes body => RNodes (Choice body)
 instance (c (Choice body), c (Option body), c OptionMod, c Expr, c Multirep, Recursively c body) => Recursively c (Choice body)
+instance RTraversable body => RTraversable (Choice body)
 
 instance RNodes body => RNodes (Option body) where
   {-# INLINE recursiveHNodes #-}
@@ -211,24 +228,34 @@ instance (c (Option body), c OptionMod, c Expr, c Multirep, Recursively c body) 
   {-# INLINE recursively #-}
   recursively _ =
     withDict (recursively $ Proxy @(c body)) Dict
+instance RTraversable body => RTraversable (Option body) where
+  {-# INLINE recursiveHTraversable #-}
+  recursiveHTraversable _ =
+    withDict (recursiveHTraversable $ Proxy @body) Dict
 
 instance RNodes OptionMod
 instance (c OptionMod, c Expr, c Multirep) => Recursively c OptionMod
+instance RTraversable OptionMod
 
 instance RNodes StartupSimpleCommand
 instance (c StartupSimpleCommand, c Expr, c Multirep) => Recursively c StartupSimpleCommand
+instance RTraversable StartupSimpleCommand
 
 instance RNodes AchData
 instance (c AchData, c Expr, c Multirep) => Recursively c AchData
+instance RTraversable AchData
 
 instance RNodes SimpleCommand
 instance (c SimpleCommand, c Expr, c Multirep) => Recursively c SimpleCommand
+instance RTraversable SimpleCommand
 
 instance RNodes SubArgs
 instance (c SubArgs, c Expr, c Multirep) => Recursively c SubArgs
+instance RTraversable SubArgs
 
 instance RNodes SetExpr
 instance (c SetExpr, c Expr, c Multirep) => Recursively c SetExpr
+instance RTraversable SetExpr
 
 pBodyWitness :: Dict (Recursively HFunctor (PBody StartupSimpleCommand))
 pBodyWitness = Dict
