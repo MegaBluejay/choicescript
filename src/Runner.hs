@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -32,6 +33,7 @@ import Text.Show.Singletons
 
 import AST
 import Compiler ()
+import Data.Functor.Identity (Identity (runIdentity))
 import Lexer (Loc (..), LocType, Span)
 
 $( singletons
@@ -77,32 +79,45 @@ type family EvaledType (h :: HyperType) where
 
 newtype Evaled h = Evaled {getEvaled :: EvaledType (GetHyperType h)}
 
-throwEvalError :: (MonadError LocedEvalError m, MonadReader EvalCtx m) => EvalError -> m a
-throwEvalError e = asks (LEE e . ctxLoc) >>= throwError
+class Monad m => MonadEval m where
+  throwEvalError :: EvalError -> m a
+  askVar :: Var -> m (Some1 Val)
 
-class LocType h ~ Span => Eval h where
-  eval :: (MonadError LocedEvalError m, MonadReader EvalCtx m) => h # Evaled -> m (EvaledType h)
+newtype EvalT m a = EvalT {unEvalT :: ReaderT EvalCtx (ExceptT LocedEvalError m) a}
+  deriving newtype (Functor, Applicative, Monad, MonadReader EvalCtx, MonadError LocedEvalError)
 
-multirepVal :: (MonadError LocedEvalError m, MonadReader EvalCtx m) => Sing t -> Val t -> m Int
+type Eval = EvalT Identity
+
+runEvalT :: EvalT m a -> EvalCtx -> m (Either LocedEvalError a)
+runEvalT x r = runExceptT $ runReaderT (unEvalT x) r
+
+runEval :: Eval a -> EvalCtx -> Either LocedEvalError a
+runEval = runIdentity .: runEvalT
+
+instance Monad m => MonadEval (EvalT m) where
+  throwEvalError e = asks (LEE e . ctxLoc) >>= throwError
+  askVar var =
+    asks ((HM.!? var) . ctxVars) >>= \case
+      Just val -> pure val
+      Nothing -> throwEvalError VarNotFound
+
+class LocType h ~ Span => Evalable h where
+  eval :: (MonadEval m) => h # Evaled -> m (EvaledType h)
+
+multirepVal :: MonadEval m => Sing t -> Val t -> m Int
 multirepVal t (Val v) = case t of
   SIntTy -> pure $ v - 1
   SBoolTy -> pure $ if v then 0 else 1
   SStrTy -> throwEvalError $ TypeMismatch StrTy [IntTy, BoolTy]
 
-instance Eval Multirep where
+instance Evalable Multirep where
   eval (Multirep (Evaled val) ss) = do
     i <- withSome1Sing val multirepVal
     if 0 <= i && i < length ss
       then pure . evalStr $ ss NE.!! i
       else throwEvalError $ OutOfBounds i
 
-evalVar :: (MonadError LocedEvalError m, MonadReader EvalCtx m) => Var -> m (Some1 Val)
-evalVar var =
-  asks ((HM.!? var) . ctxVars) >>= \case
-    Just val -> pure val
-    Nothing -> throwEvalError VarNotFound
-
-valAs :: (MonadError LocedEvalError m, MonadReader EvalCtx m) => Sing t -> Some1 Val -> m (TypeOf t)
+valAs :: MonadEval m => Sing t -> Some1 Val -> m (TypeOf t)
 valAs t (Some1 t' val) = case t %~ t' of
   Proved Refl -> pure $ getVal val
   Disproved _ -> throwEvalError $ TypeMismatch (fromSing t') [fromSing t]
@@ -116,15 +131,15 @@ bool = Val
 str :: ByteString -> Val StrTy
 str = Val
 
-evalUnOp :: (MonadError LocedEvalError m, MonadReader EvalCtx m) => UnOp -> Some1 Val -> m (Some1 Val)
+evalUnOp :: MonadEval m => UnOp -> Some1 Val -> m (Some1 Val)
 evalUnOp Neg = fmap (someVal SIntTy) . apply SIntTy negate
 evalUnOp Not = fmap (someVal SBoolTy) . apply SBoolTy not
 
-apply :: (MonadError LocedEvalError m, MonadReader EvalCtx m) => Sing t1 -> (TypeOf t1 -> x) -> Some1 Val -> m x
+apply :: MonadEval m => Sing t1 -> (TypeOf t1 -> x) -> Some1 Val -> m x
 apply t1 f x = f <$> valAs t1 x
 
 apply2
-  :: (MonadError LocedEvalError m, MonadReader EvalCtx m)
+  :: MonadEval m
   => Sing t1
   -> Sing t2
   -> (TypeOf t1 -> TypeOf t2 -> x)
@@ -144,16 +159,16 @@ someVal _ = some1 . Val @t
 
 infixr 8 .:
 
-arith :: (MonadError LocedEvalError m, MonadReader EvalCtx m) => (Int -> Int -> Int) -> Some1 Val -> Some1 Val -> m (Some1 Val)
+arith :: MonadEval m => (Int -> Int -> Int) -> Some1 Val -> Some1 Val -> m (Some1 Val)
 arith = fmap (someVal SIntTy) .:. apply2 SIntTy SIntTy
 
-cmp :: (MonadError LocedEvalError m, MonadReader EvalCtx m) => (Int -> Int -> Bool) -> Some1 Val -> Some1 Val -> m (Some1 Val)
+cmp :: MonadEval m => (Int -> Int -> Bool) -> Some1 Val -> Some1 Val -> m (Some1 Val)
 cmp = fmap (someVal SBoolTy) .:. apply2 SIntTy SIntTy
 
-logic :: (MonadError LocedEvalError m, MonadReader EvalCtx m) => (Bool -> Bool -> Bool) -> Some1 Val -> Some1 Val -> m (Some1 Val)
+logic :: MonadEval m => (Bool -> Bool -> Bool) -> Some1 Val -> Some1 Val -> m (Some1 Val)
 logic = fmap (someVal SBoolTy) .:. apply2 SBoolTy SBoolTy
 
-evalBinOp :: (MonadError LocedEvalError m, MonadReader EvalCtx m) => BinOp -> Some1 Val -> Some1 Val -> m (Some1 Val)
+evalBinOp :: MonadEval m => BinOp -> Some1 Val -> Some1 Val -> m (Some1 Val)
 evalBinOp Add = arith (+)
 evalBinOp Sub = arith (-)
 evalBinOp Mul = arith (*)
@@ -187,7 +202,7 @@ evalBinOp Get = \(Some1 t1 (Val x)) (Some1 t2 (Val y)) ->
     _ -> throwEvalError $ TypeMismatch (fromSing t1) [StrTy]
 evalBinOp Cat = fmap (someVal SStrTy) .: apply2 SStrTy SStrTy (<>)
 
-evalFun :: (MonadError LocedEvalError m, MonadReader EvalCtx m) => Fun -> Some1 Val -> m (Some1 Val)
+evalFun :: MonadEval m => Fun -> Some1 Val -> m (Some1 Val)
 evalFun Length = fmap (someVal SIntTy) . apply SStrTy C.length
 
 printVal :: Sing t -> Val t -> ByteString
@@ -212,12 +227,12 @@ evalStrPart (Inter capMode (Evaled val)) =
 evalStr :: Str # Evaled -> ByteString
 evalStr (S ss) = B.concat $ map evalStrPart ss
 
-instance Eval Expr where
+instance Evalable Expr where
   eval (Constant (Int n)) = pure $ some1 $ Val @IntTy n
   eval (Constant (Bool b)) = pure $ some1 $ Val @BoolTy b
   eval (Str s) = pure $ some1 $ Val @StrTy $ evalStr s
-  eval (Var (DirectTarget var)) = evalVar var
-  eval (Var (RefTarget (Evaled val))) = valAs SStrTy val >>= evalVar . V
+  eval (Var (DirectTarget var)) = askVar var
+  eval (Var (RefTarget (Evaled val))) = valAs SStrTy val >>= askVar . V
   eval (UnOp op (Evaled val)) = evalUnOp op val
   eval (BinOp (Evaled x) op (Evaled y)) = evalBinOp op x y
   eval (Fun fun (Evaled x)) = evalFun fun x
@@ -237,28 +252,28 @@ hthing f g =
         )
         >=> f HRecSelf
 
-prepare :: (LocType h ~ Span, MonadReader EvalCtx m) => (h # Ann Loc -> m a) -> Ann Loc # h -> m a
+prepare :: (Monad m, LocType h ~ Span) => (h # Ann Loc -> EvalT m a) -> Ann Loc # h -> EvalT m a
 prepare f (Ann (Loc loc) x) = local (\ctx -> ctx{ctxLoc = loc}) $ f x
 
 topEval
-  :: forall h m
-   . (MonadError LocedEvalError m, Recursively Eval h, RTraversable h)
+  :: forall h
+   . (Recursively Evalable h, RTraversable h)
   => Vars
   -> Ann Loc # h
-  -> m (EvaledType h)
+  -> Either LocedEvalError (EvaledType h)
 topEval vars x@(Ann (Loc loc) _) =
-  withDict (recursively $ Proxy @(Eval h)) $
-    getEvaled
-      <$> runReaderT
-        ( hthing
-            (Proxy @Eval ##>> fmap Evaled . eval)
-            (Proxy @Eval ##>> prepare)
+  withDict (recursively $ Proxy @(Evalable h)) $
+    runEval
+      ( getEvaled
+          <$> hthing
+            (Proxy @Evalable ##>> fmap Evaled . eval)
+            (Proxy @Evalable ##>> prepare)
             x
-        )
-        (EvalCtx loc vars)
+      )
+      (EvalCtx loc vars)
 
-topExprWitness :: Dict (Recursively Eval Expr)
-topExprWitness = Dict
+evalExprWitness :: Dict (Recursively Evalable Expr)
+evalExprWitness = Dict
 
 data ProgState = ProgState
   { vars :: Vars
