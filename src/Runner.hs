@@ -272,6 +272,19 @@ topEval vars x@(Ann (Loc loc) _) =
       )
       (EvalCtx loc vars)
 
+topEvalStr
+  :: Vars
+  -> Str # Ann Loc
+  -> Either LocedEvalError ByteString
+topEvalStr vars =
+  fmap evalStr
+    . htraverse
+      ( Proxy @(Recursively Evalable)
+          #*# Proxy @RTraversable
+          #> fmap Evaled
+          . topEval vars
+      )
+
 evalExprWitness :: Dict (Recursively Evalable Expr)
 evalExprWitness = Dict
 
