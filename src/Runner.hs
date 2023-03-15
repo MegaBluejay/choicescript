@@ -76,6 +76,7 @@ data EvalCtx = EvalCtx {ctxLoc :: Span, ctxVars :: Vars}
 type family EvaledType (h :: HyperType) where
   EvaledType Expr = Some1 Val
   EvaledType Multirep = ByteString
+  EvaledType Str = ByteString
 
 newtype Evaled h = Evaled {getEvaled :: EvaledType (GetHyperType h)}
 
@@ -101,8 +102,11 @@ instance Monad m => MonadEval (EvalT m) where
       Just val -> pure val
       Nothing -> throwEvalError VarNotFound
 
-class LocType h ~ Span => Evalable h where
+class (LocType h ~ Span, RTraversable h) => Evalable h where
   eval :: (MonadEval m) => h # Evaled -> m (EvaledType h)
+
+class HTraversable h => PureEvalable h where
+  pureEval :: h # Evaled -> EvaledType h
 
 multirepVal :: MonadEval m => Sing t -> Val t -> m Int
 multirepVal t (Val v) = case t of
@@ -114,7 +118,7 @@ instance Evalable Multirep where
   eval (Multirep (Evaled val) ss) = do
     i <- withSome1Sing val multirepVal
     if 0 <= i && i < length ss
-      then pure . evalStr $ ss NE.!! i
+      then pure . pureEval $ ss NE.!! i
       else throwEvalError $ OutOfBounds i
 
 valAs :: MonadEval m => Sing t -> Some1 Val -> m (TypeOf t)
@@ -224,13 +228,13 @@ evalStrPart (SPMultirep (Evaled s)) = s
 evalStrPart (Inter capMode (Evaled val)) =
   capitalize capMode $ withSome1Sing val printVal
 
-evalStr :: Str # Evaled -> ByteString
-evalStr (S ss) = B.concat $ map evalStrPart ss
+instance PureEvalable Str where
+  pureEval (S ss) = B.concat $ map evalStrPart ss
 
 instance Evalable Expr where
   eval (Constant (Int n)) = pure $ some1 $ Val @IntTy n
   eval (Constant (Bool b)) = pure $ some1 $ Val @BoolTy b
-  eval (Str s) = pure $ some1 $ Val @StrTy $ evalStr s
+  eval (Str s) = pure $ some1 $ Val @StrTy $ pureEval s
   eval (Var (DirectTarget var)) = askVar var
   eval (Var (RefTarget (Evaled val))) = valAs SStrTy val >>= askVar . V
   eval (UnOp op (Evaled val)) = evalUnOp op val
@@ -257,7 +261,7 @@ prepare f (Ann (Loc loc) x) = local (\ctx -> ctx{ctxLoc = loc}) $ f x
 
 topEval
   :: forall h
-   . (Recursively Evalable h, RTraversable h)
+   . (Recursively Evalable h)
   => Vars
   -> Ann Loc # h
   -> Either LocedEvalError (EvaledType h)
@@ -272,15 +276,15 @@ topEval vars x@(Ann (Loc loc) _) =
       )
       (EvalCtx loc vars)
 
-topEvalStr
-  :: Vars
-  -> Str # Ann Loc
-  -> Either LocedEvalError ByteString
-topEvalStr vars =
-  fmap evalStr
+topPureEval
+  :: (PureEvalable h, HNodesConstraint h (Recursively Evalable))
+  => Vars
+  -> h # Ann Loc
+  -> Either LocedEvalError (EvaledType h)
+topPureEval vars =
+  fmap pureEval
     . htraverse
       ( Proxy @(Recursively Evalable)
-          #*# Proxy @RTraversable
           #> fmap Evaled
           . topEval vars
       )
