@@ -63,18 +63,22 @@ data ChoiceMode = ChoiceMode | FakeChoiceMode
 
 data Option body h = Option
   { optionId :: Int
-  , optionMods :: [h :# OptionMod]
+  , reuseMods :: [h :# ReuseMod]
+  , ifMods :: [h :# IfMod]
   , optionText :: Str h
   , optionBody :: body h
   }
   deriving (Generic)
 
-data OptionMod h
-  = IfMod (h :# Expr)
-  | SelectableIfMod (h :# Expr)
-  | HideReuseMod
+data ReuseMod (h :: AHyperType)
+  = HideReuseMod
   | AllowReuseMod
   | DisableReuseMod
+  deriving (Generic)
+
+data IfMod h
+  = IfMod (h :# Expr)
+  | SelectableIfMod (h :# Expr)
   deriving (Generic)
 
 data StartupSimpleCommand h
@@ -161,7 +165,8 @@ makeAll
   , ''Else
   , ''Choice
   , ''Option
-  , ''OptionMod
+  , ''IfMod
+  , ''ReuseMod
   , ''StartupSimpleCommand
   , ''AchData
   , ''SimpleCommand
@@ -186,7 +191,7 @@ instance RTraversable simple => RTraversable (FlatLine simple) where
 instance RNodes simple => RNodes (PLine simple) where
   {-# INLINE recursiveHNodes #-}
   recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @simple) Dict
-instance (c (PLine simple), c (Else simple), c (PBody simple), c (Option (PBody simple)), c OptionMod, c Expr, c Multirep, Recursively c simple) => Recursively c (PLine simple) where
+instance (c (PLine simple), c (Else simple), c (PBody simple), c (Option (PBody simple)), c IfMod, c ReuseMod, c Expr, c Multirep, Recursively c simple) => Recursively c (PLine simple) where
   {-# INLINE recursively #-}
   recursively _ =
     withDict (recursively $ Proxy @(c simple)) Dict
@@ -196,21 +201,21 @@ instance RTraversable simple => RTraversable (PLine simple) where
     withDict (recursiveHTraversable $ Proxy @simple) Dict
 
 instance RNodes simple => RNodes (PBody simple)
-instance (c (PBody simple), c (PLine simple), c (Else simple), c (Option (PBody simple)), c OptionMod, c Expr, c Multirep, Recursively c simple) => Recursively c (PBody simple)
+instance (c (PBody simple), c (PLine simple), c (Else simple), c (Option (PBody simple)), c IfMod, c ReuseMod, c Expr, c Multirep, Recursively c simple) => Recursively c (PBody simple)
 instance RTraversable simple => RTraversable (PBody simple)
 
 instance RNodes simple => RNodes (If simple)
-instance (c (If simple), c (PLine simple), c (Else simple), c (PBody simple), c (Option (PBody simple)), c OptionMod, c Expr, c Multirep, Recursively c simple) => Recursively c (If simple)
+instance (c (If simple), c (PLine simple), c (Else simple), c (PBody simple), c (Option (PBody simple)), c IfMod, c ReuseMod, c Expr, c Multirep, Recursively c simple) => Recursively c (If simple)
 instance RTraversable simple => RTraversable (If simple)
 
 instance RNodes simple => RNodes (Else simple)
-instance (c (Else simple), c (PLine simple), c (PBody simple), c (Option (PBody simple)), c OptionMod, c Expr, c Multirep, Recursively c simple) => Recursively c (Else simple)
+instance (c (Else simple), c (PLine simple), c (PBody simple), c (Option (PBody simple)), c IfMod, c ReuseMod, c Expr, c Multirep, Recursively c simple) => Recursively c (Else simple)
 instance RTraversable simple => RTraversable (Else simple)
 
 instance RNodes simple => RNodes (CLoc simple) where
   {-# INLINE recursiveHNodes #-}
   recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @simple) Dict
-instance (c (CLoc simple), c (Option (Const Pos)), c OptionMod, c Expr, c (Const Pos), c Multirep, Recursively c simple) => Recursively c (CLoc simple) where
+instance (c (CLoc simple), c (Option (Const Pos)), c IfMod, c ReuseMod, c Expr, c (Const Pos), c Multirep, Recursively c simple) => Recursively c (CLoc simple) where
   {-# INLINE recursively #-}
   recursively _ =
     withDict (recursively $ Proxy @(c simple)) Dict
@@ -220,17 +225,17 @@ instance RTraversable simple => RTraversable (CLoc simple) where
     withDict (recursiveHTraversable $ Proxy @simple) Dict
 
 instance RNodes simple => RNodes (CLine simple)
-instance (c (CLine simple), c (CLoc simple), c (Option (Const Pos)), c OptionMod, c Expr, c Multirep, c (Const Pos), Recursively c simple) => Recursively c (CLine simple)
+instance (c (CLine simple), c (CLoc simple), c (Option (Const Pos)), c IfMod, c ReuseMod, c Expr, c Multirep, c (Const Pos), Recursively c simple) => Recursively c (CLine simple)
 instance RTraversable simple => RTraversable (CLine simple)
 
 instance RNodes body => RNodes (Choice body)
-instance (c (Choice body), c (Option body), c OptionMod, c Expr, c Multirep, Recursively c body) => Recursively c (Choice body)
+instance (c (Choice body), c (Option body), c IfMod, c ReuseMod, c Expr, c Multirep, Recursively c body) => Recursively c (Choice body)
 instance RTraversable body => RTraversable (Choice body)
 
 instance RNodes body => RNodes (Option body) where
   {-# INLINE recursiveHNodes #-}
   recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @body) Dict
-instance (c (Option body), c OptionMod, c Expr, c Multirep, Recursively c body) => Recursively c (Option body) where
+instance (c (Option body), c IfMod, c ReuseMod, c Expr, c Multirep, Recursively c body) => Recursively c (Option body) where
   {-# INLINE recursively #-}
   recursively _ =
     withDict (recursively $ Proxy @(c body)) Dict
@@ -239,9 +244,13 @@ instance RTraversable body => RTraversable (Option body) where
   recursiveHTraversable _ =
     withDict (recursiveHTraversable $ Proxy @body) Dict
 
-instance RNodes OptionMod
-instance (c OptionMod, c Expr, c Multirep) => Recursively c OptionMod
-instance RTraversable OptionMod
+instance RNodes IfMod
+instance (c IfMod, c Expr, c Multirep) => Recursively c IfMod
+instance RTraversable IfMod
+
+instance RNodes ReuseMod
+instance (c ReuseMod) => Recursively c ReuseMod
+instance RTraversable ReuseMod
 
 instance RNodes StartupSimpleCommand
 instance (c StartupSimpleCommand, c Expr, c Multirep) => Recursively c StartupSimpleCommand

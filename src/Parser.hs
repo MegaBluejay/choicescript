@@ -17,7 +17,8 @@ import Lexer
 import Parser.Expr
 
 type instance LocType (PLine simple) = Caret
-type instance LocType OptionMod = Caret
+type instance LocType IfMod = Caret
+type instance LocType ReuseMod = Caret
 type instance LocType (Option body) = Caret
 type instance LocType (Else simple) = Caret
 
@@ -95,7 +96,10 @@ choiceMode =
     <|> cmd FakeChoiceMode "fake_choice"
 
 option :: ParseSimple simple => Parser (Option (PBody simple) # Ann Loc)
-option = optional (withCaret $ star *> optionMod) >>= maybe noMods addMod
+option = optional (withCaret $ star *> reuseMod) >>= maybe noReuseMods addReuseMod
+
+noReuseMods :: ParseSimple simple => Parser (Option (PBody simple) # Ann Loc)
+noReuseMods = optional (withCaret $ star *> ifMod) >>= maybe noMods addIfMod
 
 nextOptionId :: Parser Int
 nextOptionId = state $ \st -> let new = nOpts st + 1 in (new, st{nOpts = new})
@@ -105,18 +109,26 @@ noMods = do
   optionId <- nextOptionId
   optionText <- text
   optionBody <- indented body
-  pure $ Option{optionMods = [], ..}
+  pure $ Option{ifMods = [], reuseMods = [], ..}
 
-addMod :: ParseSimple simple => Ann Loc # OptionMod -> Parser (Option (PBody simple) # Ann Loc)
-addMod mod = do
+addIfMod :: ParseSimple simple => Ann Loc # IfMod -> Parser (Option (PBody simple) # Ann Loc)
+addIfMod mod = do
   opt <- mbIndented option
-  pure $ opt{optionMods = mod : optionMods opt}
+  pure $ opt{ifMods = mod : ifMods opt}
 
-optionMod :: Parser (OptionMod # Ann Loc)
-optionMod =
+addReuseMod :: ParseSimple simple => Ann Loc # ReuseMod -> Parser (Option (PBody simple) # Ann Loc)
+addReuseMod mod = do
+  opt <- mbIndented option
+  pure $ opt{reuseMods = mod : reuseMods opt}
+
+ifMod :: Parser (IfMod # Ann Loc)
+ifMod =
   cmd IfMod "if" <*> expr
     <|> cmd SelectableIfMod "selectable_if" <*> expr
-    <|> cmd DisableReuseMod "disable_reuse"
+
+reuseMod :: Parser (ReuseMod # Ann Loc)
+reuseMod =
+  cmd DisableReuseMod "disable_reuse"
     <|> cmd HideReuseMod "hide_reuse"
     <|> cmd AllowReuseMod "allow_reuse"
 
