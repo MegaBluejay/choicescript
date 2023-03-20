@@ -81,7 +81,7 @@ compFlat (Ann (Loc loc) flat) = case flat of
 compIf :: Pos -> Ann Loc # If simple -> CompM simple ()
 compIf end (Ann (Loc loc) (If e b els)) = mdo
   compSingle $ CLoc $ Ann (Loc loc) $ JumpUnless e next
-  compBody end b
+  compBody (ImplicitJumpIf end) b
   next <- getPos
   mapM_ (compElse end) els
 
@@ -91,25 +91,25 @@ compTopIf xif = mdo
   end <- getPos
   pure ()
 
-compBody :: Pos -> PBody simple # Ann Loc -> CompM simple ()
-compBody end (PBody ls) = do
+compBody :: CLine simple # Ann Loc -> PBody simple # Ann Loc -> CompM simple ()
+compBody ender (PBody ls) = do
   mapM_ compLine ls
-  compSingle $ ImplicitJump end
+  compSingle ender
 
 compElse :: Pos -> Ann Loc # Else simple -> CompM simple ()
 compElse end (Ann (Loc loc) els) = case els of
   Elseif xif -> compIf end $ Ann (Loc loc) xif
-  Else b -> compBody end b
+  Else b -> compBody (ImplicitJumpIf end) b
 
 compChoice :: Ann Loc # Choice (PBody simple) -> CompM simple ()
 compChoice (Ann (Loc loc) (Choice cm opts)) = mdo
   compSingle $ CLoc $ Ann (Loc loc) $ CChoice $ Choice cm opts'
-  opts' <- mapM (compOption end) opts
+  opts' <- mapM (compOption $ ImplicitJumpChoice cm end) opts
   end <- getPos
   pure ()
 
-compOption :: Pos -> Ann Loc # Option (PBody simple) -> CompM simple (Ann Loc # Option (Const Pos))
-compOption end (Ann (Loc loc) (Option xid rms ims t b)) = do
+compOption :: CLine simple # Ann Loc -> Ann Loc # Option (PBody simple) -> CompM simple (Ann Loc # Option (Const Pos))
+compOption ender (Ann (Loc loc) (Option xid rms ims t b)) = do
   pos <- getPos
-  compBody end b
+  compBody ender b
   pure $ Ann (Loc loc) (Option xid rms ims t (Const pos))

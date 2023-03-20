@@ -51,7 +51,8 @@ data CLoc simple h
 
 data CLine simple h
   = CLoc (h :# CLoc simple)
-  | ImplicitJump Pos
+  | ImplicitJumpChoice ChoiceMode Pos
+  | ImplicitJumpIf Pos
   deriving (Generic)
 
 data Choice body h
@@ -102,7 +103,7 @@ data AchData h = AchData
 data SimpleCommand h
   = HideReuse
   | Temp Var (h :# Expr)
-  | Set (Target Var h) (SetExpr h)
+  | Set (Target Var h) (h :# SetExpr)
   | Delete Var
   | InputNumber Var Int Int
   | InputText Var
@@ -253,7 +254,7 @@ instance (c ReuseMod) => Recursively c ReuseMod
 instance RTraversable ReuseMod
 
 instance RNodes StartupSimpleCommand
-instance (c StartupSimpleCommand, c Expr, c Multirep) => Recursively c StartupSimpleCommand
+instance (c StartupSimpleCommand, c SetExpr, c Expr, c Multirep) => Recursively c StartupSimpleCommand
 instance RTraversable StartupSimpleCommand
 
 instance RNodes AchData
@@ -261,7 +262,7 @@ instance (c AchData, c Expr, c Multirep) => Recursively c AchData
 instance RTraversable AchData
 
 instance RNodes SimpleCommand
-instance (c SimpleCommand, c Expr, c Multirep) => Recursively c SimpleCommand
+instance (c SimpleCommand, c SetExpr, c Expr, c Multirep) => Recursively c SimpleCommand
 instance RTraversable SimpleCommand
 
 instance RNodes SubArgs

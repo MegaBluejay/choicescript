@@ -1,1 +1,4 @@
-1 + y
+*choice
+  *if x
+    *hide_reuse
+      #

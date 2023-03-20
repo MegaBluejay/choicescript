@@ -21,6 +21,7 @@ type instance LocType IfMod = Caret
 type instance LocType ReuseMod = Caret
 type instance LocType (Option body) = Caret
 type instance LocType (Else simple) = Caret
+type instance LocType SetExpr = Span
 
 indent :: Parser ()
 indent =
@@ -139,7 +140,7 @@ instance ParseSimple SimpleCommand where
   simple =
     cmd HideReuse "hide_reuse"
       <|> cmd Temp "temp" <*> var <*> expr
-      <|> cmd Set "set" <*> target var <*> setExpr
+      <|> cmd Set "set" <*> target var <*> withSpan setExpr
       <|> cmd Delete "delete" <*> var
       <|> cmd InputNumber "input_number" <*> var <*> int <*> int
       <|> cmd InputText "input_text" <*> var

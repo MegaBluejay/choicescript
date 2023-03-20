@@ -53,3 +53,4 @@ library:
     - singletons-base
     - exinst
     - exinst-base
+    - containers
