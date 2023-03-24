@@ -3,20 +3,22 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
-{-# OPTIONS_GHC -Wno-unused-imports #-}
 
 module Runner (
   module Runner,
 ) where
 
+import Control.Lens hiding (Choice)
+import Control.Lens.Internal.Zoom
+import Control.Lens.Unsound
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
-import Control.Monad.Trans
 import Data.Bool.Singletons
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as B
@@ -25,28 +27,29 @@ import Data.Char
 import Data.Eq.Singletons
 import Data.Foldable
 import Data.Function
+import Data.Generics.Product.Fields
 import Data.HashMap.Strict (HashMap)
 import Data.HashMap.Strict qualified as HM
-import Data.IntSet (IntSet)
-import Data.IntSet qualified as IS
-import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Maybe
-import Data.Singletons.Decide
-import Data.Singletons.TH
+import Data.Singletons.Decide qualified as Decide
+import Data.Singletons.TH hiding ((%~))
 import Data.String.Singletons
 import Data.Vector (Vector)
-import Data.Vector qualified as V
 import Exinst
-import Exinst.Base
+import Exinst.Base ()
 import Hyper
 import Hyper.Recurse
+import Text.Regex.Lens
+import Text.Regex.PCRE
+import Text.Regex.Quote
 import Text.Show.Singletons
 
 import AST
-import Compiler
-import Data.Functor.Identity (Identity (runIdentity))
+import Compiler ()
+import Data.IntSet (IntSet)
 import Lexer (Caret, Careted (..), Loc (..), LocType, Span, Spanned (..))
+import Parser ()
 
 $( singletons
     [d|
@@ -142,7 +145,7 @@ instance Evalable Multirep where
       else throwEvalError $ EvalOutOfBounds i
 
 valAs :: MonadCast m => Sing t -> Some1 Val -> m (TypeOf t)
-valAs t (Some1 t' val) = case t %~ t' of
+valAs t (Some1 t' val) = case t Decide.%~ t' of
   Proved Refl -> pure $ getVal val
   Disproved _ -> throwCastError (fromSing t') (fromSing t)
 
@@ -313,49 +316,163 @@ topPureEval vars =
 evalExprWitness :: Dict (Recursively Evalable Expr)
 evalExprWitness = Dict
 
-data RunError
-  = EvalError (Spanned EvalError)
-  | RunTypeMismatch ValTy [ValTy]
-  | RunVarNotFound Var
-  | VarConflict Var
-  | NoImplicitControlFlow
-  | NoActiveSub
-  | LabelNotFound Label
-  deriving (Show)
+newtype GlobalRunState = GlobalRunState {globalVars :: Vars}
+  deriving (Generic, Show)
 
-data AllVars = AllVars
-  { tempVars :: Vars
-  , globalVars :: Vars
+data RunState = RunState
+  { globalCtx :: GlobalRunState
+  , tempVars :: Vars
+  , reusedOpts :: IntSet
+  , runSettings :: RunSettings
+  , runPos :: Pos
+  , stack :: [RunFrame]
   }
-  deriving (Show)
+  deriving (Generic, Show)
 
-unifiedVars :: AllVars -> Vars
-unifiedVars (AllVars tvs gvs) = HM.union tvs gvs
-
-data RunState = ProgState
-  { vars :: AllVars
-  , pos :: Pos
-  , hiddenOpts :: IntSet
-  , hideReuse :: Bool
-  , implicitControlFlow :: Bool
-  , frames :: [Pos]
+data RunFrame = RunFrame
+  { args :: [Some1 Val]
+  , returnPos :: Pos
   }
-  deriving (Show)
+  deriving (Generic, Show)
+
+data RunSettings = RunSettings
+  { hideReuse :: Bool
+  , implicitFlow :: Bool
+  }
+  deriving (Generic, Show)
 
 data RunCtx simple = RunCtx
   { lbls :: HashMap Label Pos
   , prog :: Vector (CLine simple # Ann Loc)
   , runLoc :: Caret
   }
+  deriving (Generic)
 
-newtype RunT simple m a = RunT {unRunT :: ReaderT (RunCtx simple) (StateT RunState (ExceptT (Careted RunError) m)) a}
-  deriving newtype (Functor, Applicative, Monad, MonadReader (RunCtx simple), MonadState RunState, MonadError (Careted RunError))
+data RunError
+  = RunVarNotFound Var
+  | ParamNotFound Int
+  | NoFrame
+  | LabelNotFound Label
+  | VarExists Var
+  | RunTypeMismatch ValTy [ValTy]
+  | NoImplicitFlow
+  | InvalidParam ByteString
+  | ParamsLengthMismatch Int Int
+  | EvalError (Spanned EvalError)
+  deriving (Generic, Show)
 
-instance MonadTrans (RunT simple) where
+type ValPair = (Maybe (Some1 Val), Maybe (Some1 Val))
+
+varsPair :: Lens' RunState (Vars, Vars)
+varsPair = lensProduct (field @"globalCtx" . field @"globalVars") (field @"tempVars")
+
+valPair :: Var -> Lens' RunState ValPair
+valPair var = lensProduct (varsPair . _1 . at var) (varsPair . _2 . at var)
+
+getVar' :: (MonadRunError m, MonadReader ValPair m) => Var -> m (Some1 Val)
+getVar' var = do
+  (gval, tval) <- ask
+  case gval of
+    Just val -> pure val
+    Nothing -> case tval of
+      Just val -> pure val
+      Nothing -> throwRunError $ RunVarNotFound var
+
+setVar' :: (MonadRunError m, MonadState ValPair m) => Var -> Some1 Val -> m ()
+setVar' var val = do
+  (gval, tval) <- get
+  case gval of
+    Just _ -> _1 .= Just val
+    Nothing -> case tval of
+      Just _ -> _2 .= Just val
+      Nothing -> throwRunError $ RunVarNotFound var
+
+tempVar' :: (MonadRunError m, MonadState ValPair m) => Var -> Some1 Val -> m ()
+tempVar' var val =
+  get >>= \case
+    (Nothing, Nothing) -> _2 .= Just val
+    _ -> throwRunError $ VarExists var
+
+createVar' :: (MonadRunError m, MonadState ValPair m) => Var -> Some1 Val -> m ()
+createVar' var val =
+  get >>= \case
+    (Nothing, Nothing) -> _1 .= Just val
+    _ -> throwRunError $ VarExists var
+
+deleteVar' :: (MonadRunError m, MonadState ValPair m) => Var -> m ()
+deleteVar' var = do
+  (gval, tval) <- get
+  case gval of
+    Just _ -> _1 .= Nothing
+    Nothing -> case tval of
+      Just _ -> _2 .= Nothing
+      Nothing -> throwRunError $ RunVarNotFound var
+
+varParam :: MonadRunError m => Var -> m (Maybe Int)
+varParam (V v) = case v ^? regex [r|^param_([1-9]\d*)?|] . captures . ix 0 of
+  Just "" -> throwRunError $ InvalidParam v
+  Just p -> pure . Just . read $ C.unpack p
+  Nothing -> pure Nothing
+
+newtype RunT r s e m a = RunT {unRunT :: ReaderT r (StateT s (ExceptT e m)) a}
+  deriving newtype (Functor, Applicative, Monad, MonadState s, MonadError e, MonadReader r)
+
+runRunT :: Monad m => RunT r s e m a -> r -> s -> m (Either e a)
+runRunT x r s = runExceptT $ evalStateT (runReaderT (unRunT x) r) s
+
+instance MonadTrans (RunT r s e) where
   lift = RunT . lift . lift . lift
 
-evalToRun :: MonadRun m => Either (Spanned EvalError) a -> m a
+type instance Zoomed (RunT r s e m) = Focusing (ExceptT e m)
+
+instance Monad m => Zoom (RunT r s e m) (RunT r t e m) s t where
+  zoom l (RunT x) = RunT $ zoom l x
+
+type RunT' simple = RunT (RunCtx simple) RunState (Careted RunError)
+
+class (MonadInter m, MonadRunError m, MonadCast m) => MonadRun m where
+  getVar :: Var -> m (Some1 Val)
+  setVar :: Var -> Some1 Val -> m ()
+  tempVar :: Var -> Some1 Val -> m ()
+  deleteVar :: Var -> m ()
+
+  nextLine :: m ()
+  jumpToPos :: Pos -> m ()
+  jumpToLabel :: Label -> m ()
+
+  withCaret :: LocType h ~ Caret => (h # Ann Loc -> m a) -> Ann Loc # h -> m a
+
+  runTopEval :: Recursively Evalable h => Ann Loc # h -> m (EvaledType h)
+  runTopPureEval :: PureEvalable h => h # Ann Loc -> m (EvaledType h)
+
+  withSettings :: State RunSettings a -> m a
+
+  checkReused :: Int -> m Bool
+
+  pushFrame :: RunFrame -> m ()
+  popFrame :: m Pos
+
+  getPos :: m Pos
+
+  getArgs :: m [Some1 Val]
+
+class MonadRun m => MonadStartup m where
+  createVar :: Var -> Some1 Val -> m ()
+
+class Monad m => MonadRunError m where
+  throwRunError :: RunError -> m a
+
+instance Monad m => MonadRunError (RunT (RunCtx simple) s (Careted RunError) m) where
+  throwRunError e = view (field @"runLoc") >>= throwError . (e :^)
+
+evalToRun :: MonadRunError m => Either (Spanned EvalError) a -> m a
 evalToRun = either (throwRunError . EvalError) pure
+
+unifiedVars :: Getter RunState Vars
+unifiedVars = varsPair . to (uncurry HM.union)
+
+instance Monad m => MonadCast (RunT (RunCtx simple) s (Careted RunError) m) where
+  throwCastError got exp = throwRunError $ RunTypeMismatch got [exp]
 
 class Monad m => MonadInter m where
   display :: ByteString -> m ()
@@ -364,138 +481,69 @@ class Monad m => MonadInter m where
   inputNumber :: Int -> Int -> m Int
   inputText :: m ByteString
 
-instance MonadInter m => MonadInter (RunT simple m) where
+instance MonadInter m => MonadInter (RunT r s e m) where
   display = lift . display
   button = lift . button
   choose = lift . choose
   inputNumber = lift .: inputNumber
   inputText = lift inputText
 
-class (MonadInter m, MonadCast m) => MonadRun m where
-  throwRunError :: RunError -> m a
-  nextLine :: m ()
-  jumpToPos :: Pos -> m ()
-  jumpToLabel :: Label -> m ()
-  withCaret :: LocType h ~ Caret => (h # Ann Loc -> m a) -> Ann Loc # h -> m a
-  runTopEval :: Recursively Evalable h => Ann Loc # h -> m (EvaledType h)
-  runTopPureEval :: PureEvalable h => h # Ann Loc -> m (EvaledType h)
-  tempVar :: Var -> Some1 Val -> m ()
-  createVar :: Var -> Some1 Val -> m ()
-  setVar :: Var -> Some1 Val -> m ()
-  getVar :: Var -> m (Some1 Val)
-  deleteVar :: Var -> m ()
-  isReused :: Int -> m Bool
-  getHideReuse :: m Bool
-  setHideReuse :: m ()
-  getImplicitControlFlow :: m Bool
-  pushFrame :: m ()
-  popFrame :: m ()
+instance MonadInter m => MonadRun (RunT' simple m) where
+  getVar var =
+    varParam var >>= \case
+      Just i ->
+        preuse (field @"stack" . ix 0 . field @"args" . ix i) >>= \case
+          Just val -> pure val
+          Nothing -> throwRunError $ ParamNotFound i
+      Nothing -> zoom (valPair var) $ getRO $ getVar' var
 
-instance MonadInter m => MonadRun (RunT simple m) where
-  throwRunError e = asks ((e :^) . runLoc) >>= throwError
+  setVar var val = zoom (valPair var) $ setVar' var val
+  tempVar var val = zoom (valPair var) $ tempVar' var val
+  deleteVar var = zoom (valPair var) $ deleteVar' var
 
-  nextLine = modify $ \ctx -> ctx{pos = pos ctx + 1}
+  nextLine = field @"runPos" . _Wrapped' %= succ
+  jumpToPos pos = field @"runPos" .= pos
+  jumpToLabel lbl =
+    view (field @"lbls" . at lbl) >>= \case
+      Just pos -> jumpToPos pos
+      Nothing -> throwRunError $ LabelNotFound lbl
 
-  jumpToPos pos = modify $ \ctx -> ctx{pos = pos}
+  withCaret f (Ann (Loc loc) x) = local (field @"runLoc" .~ loc) $ f x
 
-  jumpToLabel lbl = asks ((HM.!? lbl) . lbls) >>= maybe (throwRunError $ LabelNotFound lbl) jumpToPos
+  runTopEval x = use unifiedVars >>= evalToRun . flip topEval x
+  runTopPureEval x = use unifiedVars >>= evalToRun . flip topPureEval x
 
-  withCaret f (Ann (Loc loc) x) = local (\ctx -> ctx{runLoc = loc}) $ f x
+  withSettings = zoom (field @"runSettings") . state . runState
 
-  runTopEval x = gets (unifiedVars . vars) >>= \vs -> evalToRun $ topEval vs x
+  checkReused i = field @"reusedOpts" . at i %%= \x -> (isJust x, Just ())
 
-  runTopPureEval x = gets (unifiedVars . vars) >>= \vs -> evalToRun $ topPureEval vs x
+  pushFrame frame = field @"stack" %= (frame :)
+  popFrame =
+    zoom (field @"stack") $
+      gets uncons >>= \case
+        Just (f, fs) -> returnPos f <$ put fs
+        Nothing -> throwRunError NoFrame
 
-  tempVar var val = do
-    avs <- gets vars
-    let gvs = globalVars avs
-        tvs = tempVars avs
-    if HM.member var gvs || HM.member var tvs
-      then throwRunError $ VarConflict var
-      else modify $ \st -> st{vars = avs{tempVars = HM.insert var val tvs}}
+  getPos = use $ field @"runPos"
 
-  createVar var val = do
-    avs <- gets vars
-    let gvs = globalVars avs
-        tvs = globalVars avs
-    if HM.member var gvs || HM.member var tvs
-      then throwRunError $ VarConflict var
-      else modify $ \st -> st{vars = avs{globalVars = HM.insert var val gvs}}
+  getArgs =
+    preuse (field @"stack" . ix 0 . field @"args") >>= \case
+      Just as -> pure as
+      Nothing -> throwRunError NoFrame
 
-  setVar var val = do
-    avs <- gets vars
-    let gvs = globalVars avs
-    if HM.member var gvs
-      then modify $ \st -> st{vars = avs{globalVars = HM.insert var val gvs}}
-      else
-        let tvs = tempVars avs
-         in if HM.member var tvs
-              then modify $ \st -> st{vars = avs{tempVars = HM.insert var val tvs}}
-              else throwRunError $ RunVarNotFound var
+newtype RO m a = RO {getRO :: m a}
+  deriving newtype (Functor, Applicative, Monad, MonadRunError)
 
-  getVar var = do
-    avs <- gets vars
-    case globalVars avs HM.!? var of
-      Just val -> pure val
-      Nothing -> case tempVars avs HM.!? var of
-        Just val -> pure val
-        Nothing -> throwRunError $ RunVarNotFound var
+instance MonadState s m => MonadReader s (RO m) where
+  ask = RO get
+  local f (RO x) = RO $ do
+    st <- get
+    put $ f st
+    res <- x
+    put st
+    pure res
 
-  deleteVar var = do
-    avs <- gets vars
-    let gvs = globalVars avs
-    if HM.member var gvs
-      then modify $ \st -> st{vars = avs{globalVars = HM.delete var gvs}}
-      else
-        let tvs = tempVars avs
-         in if HM.member var tvs
-              then modify $ \st -> st{vars = avs{tempVars = HM.delete var tvs}}
-              else throwRunError $ RunVarNotFound var
-
-  isReused i = state $ \st ->
-    let h = IS.member i $ hiddenOpts st
-     in if h then (True, st) else (False, st{hiddenOpts = IS.insert i $ hiddenOpts st})
-
-  getHideReuse = gets hideReuse
-  setHideReuse = modify $ \st -> st{hideReuse = True}
-
-  getImplicitControlFlow = gets implicitControlFlow
-
-  pushFrame = gets pos >>= \p -> modify $ \st -> st{frames = p : frames st}
-  popFrame = do
-    fs <- gets frames
-    case fs of
-      (f : fs') -> modify (\st -> st{frames = fs'}) *> jumpToPos f
-      [] -> throwRunError NoActiveSub
-
-instance MonadInter m => MonadCast (RunT simple m) where
-  throwCastError got exp = throwRunError $ RunTypeMismatch got [exp]
-
-runLine :: (RunSimple simple, MonadRun m) => CLine simple # Ann Loc -> m ()
-runLine (CLoc cLoc) = runCLoc cLoc
-runLine (ImplicitJumpIf pos) = jumpToPos pos
-runLine (ImplicitJumpChoice cm pos) = case cm of
-  FakeChoiceMode -> jumpToPos pos
-  ChoiceMode -> do
-    imp <- getImplicitControlFlow
-    if imp
-      then jumpToPos pos
-      else throwRunError NoImplicitControlFlow
-
-runCLoc :: (RunSimple simple, MonadRun m) => Ann Loc # CLoc simple -> m ()
-runCLoc = withCaret $ \case
-  CFlat flat -> runFlat flat
-  JumpUnless e pos -> do
-    val <- runTopEval e
-    b <- valAs SBoolTy val
-    if b then nextLine else jumpToPos pos
-  CChoice choice -> runChoice choice
-
-runFlat :: (RunSimple simple, MonadRun m) => FlatLine simple # Ann Loc -> m ()
-runFlat (Text s) = runTopPureEval s >>= display
-runFlat EmptyLine = display "\n"
-runFlat (Label _) = pure ()
-runFlat (Simple simple) = runSimple simple
+data FrontOpt tag (sel :: Bool) = MkFrontOpt Pos ByteString
 
 data OptAttrs = OptAttrs
   { vis :: Bool
@@ -514,21 +562,19 @@ applyIfMod (SelectableIfMod e) attrs = do
 
 applyReuseMod :: MonadRun m => Int -> ReuseMod # Ann Loc -> OptAttrs -> m OptAttrs
 applyReuseMod i HideReuseMod attrs = do
-  b <- isReused i
+  b <- checkReused i
   pure $ attrs{vis = not b && vis attrs}
 applyReuseMod _ AllowReuseMod attrs =
   pure $ attrs{vis = True}
 applyReuseMod i DisableReuseMod attrs = do
-  b <- isReused i
+  b <- checkReused i
   pure $ attrs{sel = not b && sel attrs}
 
 applyMods :: MonadRun m => Option (Const Pos) # Ann Loc -> m OptAttrs
 applyMods opt = do
-  ghr <- getHideReuse
+  ghr <- withSettings $ use $ field @"hideReuse"
   afterReuseMods <- foldlM (withCaret . flip (applyReuseMod $ optionId opt)) (OptAttrs ghr True) $ reuseMods opt
   foldlM (withCaret . flip applyIfMod) afterReuseMods $ ifMods opt
-
-data FrontOpt tag (sel :: Bool) = MkFrontOpt Pos ByteString
 
 toFrontOpt :: MonadRun m => Option (Const Pos) # Ann Loc -> m (Maybe (Some1 (FrontOpt tag)))
 toFrontOpt opt = do
@@ -540,62 +586,77 @@ toFrontOpt opt = do
         SomeSing selSing -> Some1 selSing $ MkFrontOpt (getConst $ optionBody opt) txt
     else pure Nothing
 
+runLine :: (RunSimple simple, MonadRun m) => CLine simple # Ann Loc -> m ()
+runLine (CLoc cLoc) = withCaret runCLoc cLoc
+runLine (ImplicitJumpIf pos) = jumpToPos pos
+runLine (ImplicitJumpChoice cm pos) = case cm of
+  FakeChoiceMode -> jumpToPos pos
+  ChoiceMode -> do
+    imp <- withSettings $ use $ field @"implicitFlow"
+    if imp then jumpToPos pos else throwRunError NoImplicitFlow
+
+runCLoc :: (RunSimple simple, MonadRun m) => CLoc simple # Ann Loc -> m ()
+runCLoc (CFlat flat) = runFlat flat
+runCLoc (JumpUnless e pos) = do
+  v <- runTopEval e
+  b <- valAs SBoolTy v
+  if b then nextLine else jumpToPos pos
+runCLoc (CChoice choice) = runChoice choice
+
+runFlat :: (RunSimple simple, MonadRun m) => FlatLine simple # Ann Loc -> m ()
+runFlat (Text s) = runTopPureEval s >>= display
+runFlat EmptyLine = display "\n"
+runFlat (Label{}) = pure ()
+runFlat (Simple simple) = runSimple simple
+
 runChoice :: MonadRun m => Choice (Const Pos) # Ann Loc -> m ()
 runChoice (Choice _ opts) = do
   frontOpts <- catMaybes . NE.toList <$> mapM (withCaret toFrontOpt) opts
   MkFrontOpt pos _ <- choose frontOpts
   jumpToPos pos
 
-runTarget :: MonadRun m => (Some1 Val -> m a) -> Target a # Ann Loc -> m a
-runTarget _ (DirectTarget x) = pure x
-runTarget f (RefTarget e) = runTopEval e >>= f
-
-runTargetLabel :: MonadRun m => Target Label # Ann Loc -> m Label
-runTargetLabel = runTarget $ fmap L . valAs SStrTy
-
-runTargetVar :: MonadRun m => Target Var # Ann Loc -> m Var
-runTargetVar = runTarget $ fmap V . valAs SStrTy
-
-getFinishStr :: MonadRun m => Maybe (Str # Ann Loc) -> m ByteString
-getFinishStr (Just str) = runTopPureEval str
-getFinishStr Nothing = pure "Next Chapter"
-
-getPageBreakStr :: MonadRun m => Maybe (Str # Ann Loc) -> m ByteString
-getPageBreakStr (Just str) = runTopPureEval str
-getPageBreakStr Nothing = pure "Next"
-
 class RunSimple simple where
   runSimple :: MonadRun m => simple # Ann Loc -> m ()
 
+runTargetLabel :: MonadRun m => Target Label # Ann Loc -> m Label
+runTargetLabel (DirectTarget lbl) = pure lbl
+runTargetLabel (RefTarget e) = do
+  v <- runTopEval e
+  s <- valAs SStrTy v
+  pure $ L s
+
+finishText :: MonadRun m => Maybe (Str # Ann Loc) -> m ByteString
+finishText (Just s) = runTopPureEval s
+finishText Nothing = pure "Next Chapter"
+
+pageBreakText :: MonadRun m => Maybe (Str # Ann Loc) -> m ByteString
+pageBreakText (Just s) = runTopPureEval s
+pageBreakText Nothing = pure "Next"
+
 instance RunSimple SimpleCommand where
-  runSimple HideReuse = setHideReuse
-  runSimple (Temp var e) = runTopEval e >>= setVar var
-  runSimple (Set target se) = runTargetVar target >>= undefined
+  runSimple HideReuse = withSettings $ field @"hideReuse" .= True
+  runSimple (Temp var e) = runTopEval e >>= tempVar var
   runSimple (Delete var) = deleteVar var
   runSimple (InputNumber var lo hi) = inputNumber lo hi >>= setVar var . some1 . Val @IntTy
   runSimple (InputText var) = inputText >>= setVar var . some1 . Val @StrTy
   runSimple (Print var) = getVar var >>= \(Some1 t v) -> display $ printVal t v
-  runSimple (Rand{}) = undefined
   runSimple (Goto target) = runTargetLabel target >>= jumpToLabel
-  runSimple (GotoScene{}) = undefined
   runSimple (Gosub (SubArgs target args)) = do
-    pushFrame
     lbl <- runTargetLabel target
+    argVals <- mapM runTopEval args
+    cpos <- getPos
+    pushFrame $ RunFrame argVals (cpos + 1)
     jumpToLabel lbl
-    forM_ (zip [1 :: Int ..] args) $ \(i, e) -> do
-      val <- runTopEval e
-      setVar (V $ "param_" <> C.pack (show i)) val
-  runSimple (GosubScene{}) = undefined
-  runSimple (Params vars) =
-    forM_ (zip [1 :: Int ..] $ NE.toList vars) $ \(i, var) ->
-      getVar (V $ "param_" <> C.pack (show i)) >>= setVar var
-  runSimple Return = popFrame *> nextLine
-  runSimple (GotoRandomScene{}) = undefined
-  runSimple (Finish fStr) = getFinishStr fStr >>= button
+    forM_ (zip [1 :: Int ..] args) $ \(i, e) ->
+      runTopEval e >>= setVar (V $ "param_" <> C.pack (show i))
+  runSimple (Params vars) = do
+    as <- getArgs
+    case (length as, NE.length vars) of
+      (al, vl)
+        | al == vl -> forM_ (zip (NE.toList vars) as) $ uncurry setVar
+        | otherwise -> throwRunError $ ParamsLengthMismatch al vl
+  runSimple Return = popFrame >>= jumpToPos
   runSimple LineBreak = display "\n"
-  runSimple (PageBreak pbStr) = getPageBreakStr pbStr >>= button
-  runSimple (Link{}) = undefined
-  runSimple (StatChart{}) = undefined
-  runSimple (Achieve{}) = undefined
-  runSimple CheckAchievements = undefined
-  runSimple Ending = undefined
+  runSimple (Finish text) = finishText text >>= button
+  runSimple (PageBreak text) = pageBreakText text >>= button
+  runSimple _ = undefined

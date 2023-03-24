@@ -40,11 +40,16 @@ library
     , exinst
     , exinst-base
     , generic-constraints
+    , generic-lens
     , hashable
     , hypertypes
+    , lens
+    , lens-regex
     , mtl
     , parsers
     , pretty-simple
+    , regex-base
+    , regex-pcre
     , singletons
     , singletons-base
     , template-haskell

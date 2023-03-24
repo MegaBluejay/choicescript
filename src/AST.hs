@@ -9,6 +9,7 @@ module AST (
   module AST.Expr,
 ) where
 
+import Control.Lens.Wrapped
 import Data.ByteString (ByteString)
 import Data.Hashable
 import Data.List.NonEmpty (NonEmpty)
@@ -157,6 +158,18 @@ newtype Achievement = A {getA :: ByteString}
 newtype Pos = P {getP :: Int}
   deriving (Show, Generic)
   deriving newtype (Eq, Ord, Enum, Num)
+
+instance Wrapped Label
+instance (t ~ ByteString) => Rewrapped Label t
+
+instance Wrapped SceneName
+instance (t ~ ByteString) => Rewrapped SceneName t
+
+instance Wrapped Achievement
+instance (t ~ ByteString) => Rewrapped Achievement t
+
+instance Wrapped Pos
+instance (t ~ Int) => Rewrapped Pos t
 
 makeAll
   [ ''FlatLine

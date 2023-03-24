@@ -5,6 +5,7 @@
 
 module AST.Expr where
 
+import Control.Lens
 import Data.ByteString (ByteString)
 import Data.Hashable
 import Data.List.NonEmpty (NonEmpty)
@@ -75,6 +76,12 @@ data Fun
 
 newtype Var = V {getV :: ByteString}
   deriving (Show, Eq, Hashable, Generic)
+
+instance Wrapped (Str h)
+instance (t ~ [StrPart h]) => Rewrapped (Str h) t
+
+instance Wrapped Var
+instance (t ~ ByteString) => Rewrapped Var t
 
 makeAll [''Target, ''StrPart, ''Str, ''Expr, ''Multirep]
 

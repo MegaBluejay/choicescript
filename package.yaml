@@ -54,3 +54,8 @@ library:
     - exinst
     - exinst-base
     - containers
+    - lens
+    - generic-lens
+    - regex-base
+    - regex-pcre
+    - lens-regex
