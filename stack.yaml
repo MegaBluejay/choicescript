@@ -1,0 +1,8 @@
+resolver: lts-20.24
+
+packages:
+- .
+
+extra-deps:
+  - git: https://github.com/lamdu/hypertypes.git
+    commit: 3d72e03552f9a0411a9b1f57e06f40487c3e12f9
