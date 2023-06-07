@@ -1,47 +1,59 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 module Run (module Run) where
 
 import Control.Monad.Reader
+import Data.ByteString (ByteString)
 import Hyper
-import Hyper.Recurse
 
 import AST
 import Eval
 
-class Monad m => MonadOuterRun m where
-  uncondJump :: Pos -> m ()
+data RunError
 
-class (MonadCast m, MonadBounded m) => MonadRun m
+class (MonadCast m, MonadBounded m) => MonadRun m where
+  throwRunError :: RunError -> m a
 
-class RTraversable h => Runnable h where
-  run :: MonadRun m => h # Runned -> m ()
+  jumpOut :: Maybe ChoiceMode -> Pos -> m ()
 
-data Runned (h :: AHyperType) = Runned
+  output :: ByteString -> m ()
+
+  runTopEval :: TopEvalable a => a -> m (EvaledType (TopHyper a))
+
+  jumpPos :: Pos -> m ()
+
+  optionUsed :: Int -> m Bool
+  hideReuse :: m Bool
 
 class RunnableSimple sim where
   runSimple :: MonadRun m => sim (Annotated Int) -> m ()
 
-instance Runnable (CCommand sim (Annotated Int)) where
-  run = undefined
+runCLine :: (MonadRun m, RunnableSimple sim) => CLine sim (Annotated Int) # h -> m ()
+runCLine (CLoc line) = runLine line
+runCLine (JumpOut mcm pos) = jumpOut mcm pos
 
-instance Runnable (Line (CCommand sim) (Annotated Int)) where
-  run = undefined
+runLine :: (MonadRun m, RunnableSimple sim) => Line (CCommand sim) (Annotated Int) # h -> m ()
+runLine EmptyLine = output "\n"
+runLine (Text s) = runTopEval s >>= output
+runLine (Command cmd) = runCommand cmd
 
-class TopRunnable a where
-  topRun :: (MonadOuterRun m, MonadRun (ReaderT Int m)) => a -> m ()
+runCommand :: (MonadRun m, RunnableSimple sim) => CCommand sim (Annotated Int) # h -> m ()
+runCommand (CSimple sim) = runSimple sim
+runCommand (CChoice opts) = undefined
+runCommand (JumpUnless e pos) = do
+  val <- runTopEval e
+  b <- asBool val
+  unless b $ jumpPos pos
 
-instance Recursively Runnable h => TopRunnable (Annotated Int # h) where
-  topRun =
-    withDict (recursively $ Proxy @(Runnable h)) $
-      void . withAnn (Proxy @Runnable ##>> \i x -> Runned <$ runReaderT (run x) i)
+data OutOption = OutOption
+  { _selectable :: Bool
+  , _text :: ByteString
+  , _pos :: Pos
+  }
 
-innerRun :: (MonadOuterRun m, MonadRun (ReaderT Int m), HTraversable h, HNodesConstraint h (Recursively Runnable)) => h # Annotated Int -> m (h # Runned)
-innerRun = htraverse $ Proxy @(Recursively Runnable) #> (Runned <$) . topRun
-
-instance TopRunnable (CLine sim (Annotated Int) # Annotated Int) where
-  topRun =
-    innerRun >=> \case
-      CLoc Runned -> pure ()
-      Jump pos -> uncondJump pos
+toOutOption :: MonadRun m => Option (Const Pos) (Annotated Int) # h -> m (Maybe OutOption)
+toOutOption opt = do
+  globalHR <- hideReuse
+  undefined

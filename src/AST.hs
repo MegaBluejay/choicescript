@@ -24,18 +24,18 @@ data Line cmd e (h :: AHyperType)
 data PCommand sim e h
   = PSimple (sim e)
   | PIf (If sim e h)
-  | PChoice (Choice (PBody sim e) e h)
+  | PChoice ChoiceMode (NonEmpty (Option (PBody sim e) e h))
   deriving (Generic)
 
 data CCommand sim e h
   = CSimple (sim e)
-  | CChoice (Choice (Const Pos) e h)
+  | CChoice (NonEmpty (Option (Const Int) e h))
   | JumpUnless (e # Expr) Pos
   deriving (Generic)
 
 data CLine sim e h
-  = CLoc (h :# Line (CCommand sim) e)
-  | Jump Pos
+  = CLoc (Line (CCommand sim) e h)
+  | JumpOut (Maybe ChoiceMode) Pos
   deriving (Generic)
 
 type PLine sim = Line (PCommand sim)
@@ -49,9 +49,6 @@ data If sim e (h :: AHyperType) = If (e # Expr) (PBody sim e h) (Maybe (h :# Els
 data Else sim e (h :: AHyperType)
   = Elseif (If sim e h)
   | Else (PBody sim e h)
-  deriving (Generic)
-
-data Choice body e h = Choice ChoiceMode (NonEmpty (Option body e h))
   deriving (Generic)
 
 data Simple e
@@ -156,10 +153,10 @@ instance Wrapped SceneName
 instance Wrapped Achievement
 instance Wrapped Pos
 
-makeAll [''Line, ''PCommand, ''CCommand, ''CLine, ''PBody, ''If, ''Else, ''Choice, ''Option]
+makeAll [''Line, ''PCommand, ''CCommand, ''CLine, ''PBody, ''If, ''Else, ''Option]
 
 instance RNodes (CLine sim e)
-instance (c (CLine sim e), c (CCommand sim e), c (Line (CCommand sim) e)) => Recursively c (CLine sim e)
+instance (c (CLine sim e)) => Recursively c (CLine sim e)
 instance RTraversable (CLine sim e)
 
 instance (RNodes (cmd e)) => RNodes (Line cmd e) where
