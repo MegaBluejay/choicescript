@@ -29,13 +29,13 @@ data PCommand sim e h
 
 data CCommand sim e h
   = CSimple (sim e)
-  | CChoice (Choice (Const Int) e h)
-  | JumpUnless (e # Expr) Int
+  | CChoice (Choice (Const Pos) e h)
+  | JumpUnless (e # Expr) Pos
   deriving (Generic)
 
 data CLine sim e h
   = CLoc (h :# Line (CCommand sim) e)
-  | Jump Int
+  | Jump Pos
   deriving (Generic)
 
 type PLine sim = Line (PCommand sim)
@@ -148,9 +148,13 @@ newtype SceneName = SN {getSN :: ByteString}
 newtype Achievement = A {getA :: ByteString}
   deriving (Show, Generic)
 
+newtype Pos = P {getP :: Int}
+  deriving (Show, Eq, Generic)
+
 instance Wrapped Label
 instance Wrapped SceneName
 instance Wrapped Achievement
+instance Wrapped Pos
 
 makeAll [''Line, ''PCommand, ''CCommand, ''CLine, ''PBody, ''If, ''Else, ''Choice, ''Option]
 

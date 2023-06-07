@@ -11,7 +11,7 @@ import AST
 import Eval
 
 class Monad m => MonadOuterRun m where
-  uncondJump :: Int -> m ()
+  uncondJump :: Pos -> m ()
 
 class (MonadCast m, MonadBounded m) => MonadRun m
 
