@@ -14,74 +14,74 @@ import Hyper.Class.Recursive
 import AST.Expr
 import AST.TH
 
-data Line cmd h
-  = Text (Str h)
+data Line (cmd :: HyperType -> HyperType) (e :: HyperType) (h :: AHyperType)
+  = Text (Str # e)
   | EmptyLine
-  | Command (cmd h)
+  | Command (cmd e h)
   deriving (Generic)
 
-type PLine cmd = Line (cmd (PBody cmd))
+type PLine (cmd :: HyperType -> HyperType -> HyperType) (e :: HyperType) = Line (cmd (PBody cmd e)) e
 
-newtype PBody cmd h = PBody [h :# PLine cmd]
+newtype PBody (cmd :: HyperType -> HyperType -> HyperType) (e :: HyperType) (h :: AHyperType) = PBody [h :# PLine cmd e]
   deriving (Generic)
 
-data CLine (cmd :: (HyperType -> HyperType)) (h :: AHyperType)
-  = CLoc (h :# Line (cmd (Const Int)))
+data CLine (cmd :: (HyperType -> HyperType -> HyperType)) e (h :: AHyperType)
+  = CLoc (h :# Line (cmd (Const Int)) e)
   | Jump Int
   deriving (Generic)
 
-data Command body h
+data Command (body :: HyperType) (e :: HyperType) (h :: AHyperType)
   = HideReuse
-  | Temp Var (h :# Expr)
-  | Set (Target Var h) (SetExpr h)
+  | Temp Var (e # Expr)
+  | Set (Target Var # e) (SetExpr e)
   | Delete Var
-  | InputNumber (Target Var h) Int Int
-  | InputText (Target Var h)
-  | Print (Target Var h)
-  | Rand (Target Var h) Int Int
-  | Goto (Target Label h)
-  | GotoScene SceneName (Maybe (Target Label h))
-  | Gosub (SubArgs h)
-  | GosubScene SceneName (Maybe (SubArgs h))
-  | Params (NonEmpty (Target Var h))
+  | InputNumber (Target Var # e) Int Int
+  | InputText (Target Var # e)
+  | Print (Target Var # e)
+  | Rand (Target Var # e) Int Int
+  | Goto (Target Label # e)
+  | GotoScene SceneName (Maybe (Target Label # e))
+  | Gosub (SubArgs e)
+  | GosubScene SceneName (Maybe (SubArgs e))
+  | Params (NonEmpty (Target Var # e))
   | Return
   | GotoRandomScene (NonEmpty SceneName)
-  | Finish (Maybe (Str h))
+  | Finish (Maybe (Str # e))
   | LineBreak
-  | PageBreak (Maybe (Str h))
+  | PageBreak (Maybe (Str # e))
   | StatChart (NonEmpty Stat)
   | Achieve Achievement
   | CheckAchievements
   | Ending
-  | IfCmd (If body h)
-  | Choice ChoiceMode (NonEmpty (h :# Option body))
+  | IfCmd (If body e h)
+  | Choice ChoiceMode (NonEmpty (h :# Option body e))
   deriving (Generic)
 
-data StartupCommand body h
-  = NormalCommand (Command body h)
-  | Create Var (h :# Expr)
+data StartupCommand body e (h :: AHyperType)
+  = NormalCommand (Command body e h)
+  | Create Var (e # Expr)
   | SceneLst (NonEmpty SceneName)
-  | Title (Str h)
-  | Author (Str h)
-  | Achievement Achievement (AchData h)
+  | Title (Str # e)
+  | Author (Str # e)
+  | Achievement Achievement (AchData e)
   deriving (Generic)
 
-data If body h = If (h :# Expr) (body h) (Maybe (h :# Else body))
+data If body e (h :: AHyperType) = If (e # Expr) (body h) (Maybe (h :# Else body e))
   deriving (Generic)
 
-data Else body h
-  = Elseif (If body h)
+data Else body e (h :: AHyperType)
+  = Elseif (If body e h)
   | Else (body h)
   deriving (Generic)
 
 data ChoiceMode = ChoiceMode | FakeChoiceMode
   deriving (Generic, Eq, Ord, Show)
 
-data Option body h = Option
+data Option body e (h :: AHyperType) = Option
   { _optionId :: Int
   , _reuseMods :: [h :# ReuseMod]
-  , _ifMods :: [h :# IfMod]
-  , _optionText :: Str h
+  , _ifMods :: [h :# IfMod e]
+  , _optionText :: Str # e
   , _optionBody :: body h
   }
   deriving (Generic)
@@ -92,26 +92,26 @@ data ReuseMod (h :: AHyperType)
   | DisableReuseMod
   deriving (Generic)
 
-data IfMod h
-  = IfMod (h :# Expr)
-  | SelectableIfMod (h :# Expr)
+data IfMod e (h :: AHyperType)
+  = IfMod (e # Expr)
+  | SelectableIfMod (e # Expr)
   deriving (Generic)
 
-data AchData h = AchData
+data AchData e = AchData
   { _visible :: Bool
   , _points :: Int
-  , _title :: Str h
-  , _preDesc :: Str h
-  , _postDesc :: Str h
+  , _title :: Str # e
+  , _preDesc :: Str # e
+  , _postDesc :: Str # e
   }
   deriving (Generic)
 
-data SetExpr h
-  = NormalSet (h :# Expr)
-  | ModSet BinOp (h :# Expr)
+data SetExpr e
+  = NormalSet (e # Expr)
+  | ModSet BinOp (e # Expr)
   deriving (Generic)
 
-data SubArgs h = SubArgs (Target Label h) [h :# Expr]
+data SubArgs e = SubArgs (Target Label # e) [e # Expr]
   deriving (Generic)
 
 data NamedStat
@@ -134,55 +134,55 @@ newtype SceneName = SN {getSN :: ByteString}
 newtype Achievement = A {getA :: ByteString}
   deriving (Show, Generic)
 
-makeAll [''Command, ''StartupCommand, ''If, ''Else, ''Line, ''PBody, ''CLine, ''Option, ''ReuseMod, ''IfMod, ''AchData, ''SetExpr, ''SubArgs]
+makeAll [''Command, ''StartupCommand, ''If, ''Else, ''Line, ''PBody, ''CLine, ''Option, ''ReuseMod, ''IfMod]
 
-instance (RNodes cmd) => RNodes (Line cmd) where
-  recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @cmd) Dict
-instance (Recursively c cmd, c (Line cmd), c Expr, c Multirep) => Recursively c (Line cmd) where
-  recursively _ = withDict (recursively $ Proxy @(c cmd)) Dict
-instance (RTraversable cmd) => RTraversable (Line cmd) where
-  recursiveHTraversable _ = withDict (recursiveHTraversable $ Proxy @cmd) Dict
+instance (RNodes (cmd e)) => RNodes (Line cmd e) where
+  recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @(cmd e)) Dict
+instance (Recursively c (cmd e), c (Line cmd e)) => Recursively c (Line cmd e) where
+  recursively _ = withDict (recursively $ Proxy @(c (cmd e))) Dict
+instance (RTraversable (cmd e)) => RTraversable (Line cmd e) where
+  recursiveHTraversable _ = withDict (recursiveHTraversable $ Proxy @(cmd e)) Dict
 
-instance (RNodes (cmd (Const Int))) => RNodes (CLine cmd)
-instance (Recursively c (cmd (Const Int)), c (CLine cmd), c (Line (cmd (Const Int))), c Expr, c Multirep) => Recursively c (CLine cmd)
-instance (RTraversable (cmd (Const Int))) => RTraversable (CLine cmd)
+instance (RNodes (cmd (Const Int) e)) => RNodes (CLine cmd e)
+instance (Recursively c (cmd (Const Int) e), c (CLine cmd e), c (Line (cmd (Const Int)) e)) => Recursively c (CLine cmd e)
+instance (RTraversable (cmd (Const Int) e)) => RTraversable (CLine cmd e)
 
-instance (RNodes (cmd (PBody cmd))) => RNodes (PBody cmd)
-instance (Recursively c (cmd (PBody cmd)), c (Line (cmd (PBody cmd))), c (PBody cmd), c Expr, c Multirep) => Recursively c (PBody cmd)
-instance (RTraversable (cmd (PBody cmd))) => RTraversable (PBody cmd)
+instance (RNodes (cmd (PBody cmd e) e)) => RNodes (PBody cmd e)
+instance (Recursively c (cmd (PBody cmd e) e), c (Line (cmd (PBody cmd e)) e), c (PBody cmd e)) => Recursively c (PBody cmd e)
+instance (RTraversable (cmd (PBody cmd e) e)) => RTraversable (PBody cmd e)
 
-instance (RNodes body) => RNodes (Command body) where
+instance (RNodes body) => RNodes (Command body e) where
   recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @body) Dict
-instance (Recursively c body, c (Command body), c Expr, c Multirep, c (Else body), c (Option body), c IfMod, c ReuseMod) => Recursively c (Command body) where
+instance (Recursively c body, c (Command body e), c (Else body e), c (Option body e), c (IfMod e), c ReuseMod) => Recursively c (Command body e) where
   recursively _ = withDict (recursively $ Proxy @(c body)) Dict
-instance (RTraversable body) => RTraversable (Command body) where
+instance (RTraversable body) => RTraversable (Command body e) where
   recursiveHTraversable _ = withDict (recursiveHTraversable $ Proxy @body) Dict
 
-instance (RNodes body) => RNodes (StartupCommand body) where
+instance (RNodes body) => RNodes (StartupCommand body e) where
   recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @body) Dict
-instance (Recursively c body, c (StartupCommand body), c Expr, c Multirep, c (Else body), c (Option body), c IfMod, c ReuseMod) => Recursively c (StartupCommand body) where
+instance (Recursively c body, c (StartupCommand body e), c (Else body e), c (Option body e), c (IfMod e), c ReuseMod) => Recursively c (StartupCommand body e) where
   recursively _ = withDict (recursively $ Proxy @(c body)) Dict
-instance (RTraversable body) => RTraversable (StartupCommand body) where
+instance (RTraversable body) => RTraversable (StartupCommand body e) where
   recursiveHTraversable _ = withDict (recursiveHTraversable $ Proxy @body) Dict
 
-instance (RNodes body) => RNodes (Else body) where
+instance (RNodes body) => RNodes (Else body e) where
   recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @body) Dict
-instance (Recursively c body, c (Else body), c Expr, c Multirep) => Recursively c (Else body) where
+instance (Recursively c body, c (Else body e)) => Recursively c (Else body e) where
   recursively _ = withDict (recursively $ Proxy @(c body)) Dict
-instance (RTraversable body) => RTraversable (Else body) where
+instance (RTraversable body) => RTraversable (Else body e) where
   recursiveHTraversable _ = withDict (recursiveHTraversable $ Proxy @body) Dict
 
-instance (RNodes body) => RNodes (Option body) where
+instance (RNodes body) => RNodes (Option body e) where
   recursiveHNodes _ = withDict (recursiveHNodes $ Proxy @body) Dict
-instance (Recursively c body, c (Option body), c Expr, c Multirep, c IfMod, c ReuseMod) => Recursively c (Option body) where
+instance (Recursively c body, c (Option body e), c (IfMod e), c ReuseMod) => Recursively c (Option body e) where
   recursively _ = withDict (recursively $ Proxy @(c body)) Dict
-instance (RTraversable body) => RTraversable (Option body) where
+instance (RTraversable body) => RTraversable (Option body e) where
   recursiveHTraversable _ = withDict (recursiveHTraversable $ Proxy @body) Dict
 
 instance RNodes ReuseMod
 instance (c ReuseMod) => Recursively c ReuseMod
 instance RTraversable ReuseMod
 
-instance RNodes IfMod
-instance (c IfMod, c Expr, c Multirep) => Recursively c IfMod
-instance RTraversable IfMod
+instance RNodes (IfMod e)
+instance (c (IfMod e)) => Recursively c (IfMod e)
+instance RTraversable (IfMod e)
