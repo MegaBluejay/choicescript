@@ -1,10 +1,14 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Eval (module Eval) where
 
 import Control.Lens hiding (Index, op)
+import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Monad.State
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as B
 import Data.ByteString.Char8 qualified as C
@@ -16,6 +20,28 @@ import Hyper
 import Hyper.Recurse
 
 import AST
+
+newtype ScopedT sc m a = ScopedT {getScoped :: ReaderT sc m a}
+  deriving newtype (Functor, Applicative, Monad, MonadState s, MonadTrans, MonadError e)
+
+instance MonadReader r m => MonadReader r (ScopedT s m) where
+  ask = lift ask
+  reader = lift . reader
+  local f (ScopedT (ReaderT x)) = ScopedT $ ReaderT $ local f . x
+
+runScopedT :: ScopedT s m a -> s -> m a
+runScopedT (ScopedT x) = runReaderT x
+
+class Monad m => MonadScoped sc m where
+  getScope :: m sc
+
+instance Monad m => MonadScoped sc (ScopedT sc m) where
+  getScope = ScopedT ask
+
+instance Zoom m n s t => Zoom (ScopedT sc m) (ScopedT sc n) s t where
+  zoom l (ScopedT (ReaderT m)) = ScopedT $ ReaderT $ zoom l . m
+
+type instance Zoomed (ScopedT sc m) = Zoomed m
 
 class Monad m => MonadCast m where
   throwTypeError :: TypeError -> m a
@@ -227,15 +253,15 @@ withAnn f = hpara (\w (Ann (Const a) _) -> f w a) (const $ view hVal)
 
 class TopEvalable a where
   type TopHyper a :: HyperType
-  topEval :: (MonadCast m, MonadEval (ReaderT Int m)) => a -> m (EvaledType (TopHyper a))
+  topEval :: (MonadCast m, MonadEval (ScopedT Int m)) => a -> m (EvaledType (TopHyper a))
 
 instance Recursively Evalable h => TopEvalable (Annotated Int # h) where
   type TopHyper (Annotated Int # h) = h
   topEval =
     withDict (recursively $ Proxy @(Evalable h)) $
-      fmap getEvaled . withAnn (Proxy @Evalable ##>> \i x -> Evaled <$> runReaderT (eval x) i)
+      fmap getEvaled . withAnn (Proxy @Evalable ##>> \i x -> Evaled <$> runScopedT (eval x) i)
 
-innerEval :: (MonadCast m, MonadEval (ReaderT Int m), HTraversable h, HNodesConstraint h (Recursively Evalable)) => h # Annotated Int -> m (h # Evaled)
+innerEval :: (MonadCast m, MonadEval (ScopedT Int m), HTraversable h, HNodesConstraint h (Recursively Evalable)) => h # Annotated Int -> m (h # Evaled)
 innerEval = htraverse $ Proxy @(Recursively Evalable) #> fmap Evaled . topEval
 
 instance TopEvalable (Str # Annotated Int) where
