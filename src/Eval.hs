@@ -4,6 +4,7 @@
 module Eval (module Eval) where
 
 import Control.Lens hiding (Index, op)
+import Control.Monad.Reader
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as B
 import Data.ByteString.Char8 qualified as C
@@ -14,7 +15,7 @@ import Data.List.NonEmpty qualified as NE
 import Hyper
 import Hyper.Recurse
 
-import AST.Expr
+import AST
 
 class Monad m => MonadCast m where
   throwTypeError :: TypeError -> m a
@@ -62,13 +63,9 @@ class (MonadCast m, MonadBounded m) => MonadEval m where
   throwEvalError :: EvalError -> m a
   getVar :: Var -> m Val
 
-type family EvaledType (h :: HyperType) where
-  EvaledType Expr = Val
-  EvaledType Multirep = ByteString
-
 newtype Evaled (h :: AHyperType) = Evaled {getEvaled :: EvaledType (GetHyperType h)}
 
-class Evalable h where
+class RTraversable h => Evalable h where
   eval :: MonadEval m => h # Evaled -> m (EvaledType h)
 
 data ValTy = IntTy | BoolTy | StrTy
@@ -186,6 +183,12 @@ evalBinOp Cat = \s1 s2 -> do
 evalFun :: MonadCast m => Fun -> Val -> m Val
 evalFun Length = fmap (IntVal . C.length) . asStr
 
+type family EvaledType (h :: HyperType) where
+  EvaledType Expr = Val
+  EvaledType Multirep = ByteString
+  EvaledType Str = ByteString
+  EvaledType (Target a) = a
+
 instance Evalable Expr where
   eval (Constant (Int n)) = pure $ IntVal n
   eval (Constant (Bool n)) = pure $ BoolVal n
@@ -219,3 +222,29 @@ withAnn
   -> Annotated a # h
   -> m (w1 # h)
 withAnn f = hpara (\w (Ann (Const a) _) -> f w a) (const $ view hVal)
+
+class TopEvalable a where
+  type TopHyper a :: HyperType
+  topEval :: (MonadCast m, MonadEval (ReaderT Int m)) => a -> m (EvaledType (TopHyper a))
+
+instance Recursively Evalable h => TopEvalable (Annotated Int # h) where
+  type TopHyper (Annotated Int # h) = h
+  topEval =
+    withDict (recursively $ Proxy @(Evalable h)) $
+      fmap getEvaled . withAnn (Proxy @Evalable ##>> \i x -> Evaled <$> runReaderT (eval x) i)
+
+innerEval :: (MonadCast m, MonadEval (ReaderT Int m), HTraversable h, HNodesConstraint h (Recursively Evalable)) => h # Annotated Int -> m (h # Evaled)
+innerEval = htraverse $ Proxy @(Recursively Evalable) #> fmap Evaled . topEval
+
+instance TopEvalable (Str # Annotated Int) where
+  type TopHyper (Str # Annotated Int) = Str
+
+  topEval = fmap evalStr . innerEval
+
+instance (Wrapped a, Unwrapped a ~ ByteString) => TopEvalable (Target a # Annotated Int) where
+  type TopHyper (Target a # Annotated Int) = Target a
+
+  topEval =
+    innerEval >=> \case
+      DirectTarget a -> pure a
+      RefTarget (Evaled val) -> (_Wrapped' #) <$> asStr val

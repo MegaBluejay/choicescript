@@ -13,6 +13,7 @@ import Hyper.Class.Recursive
 
 import AST.Expr
 import AST.TH
+import Control.Lens (Wrapped)
 
 data Line (cmd :: HyperType -> HyperType) (e :: HyperType) (h :: AHyperType)
   = Text (Str # e)
@@ -133,6 +134,10 @@ newtype SceneName = SN {getSN :: ByteString}
 
 newtype Achievement = A {getA :: ByteString}
   deriving (Show, Generic)
+
+instance Wrapped Label
+instance Wrapped SceneName
+instance Wrapped Achievement
 
 makeAll [''Command, ''StartupCommand, ''If, ''Else, ''Line, ''PBody, ''CLine, ''Option, ''ReuseMod, ''IfMod]
 
