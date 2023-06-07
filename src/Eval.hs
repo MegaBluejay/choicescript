@@ -59,9 +59,11 @@ instance MBounded (NonEmpty a) where
 class Monad m => MonadBounded m where
   checkBounds :: MBounded t => t -> Index t -> m (Item t)
 
-class (MonadCast m, MonadBounded m) => MonadEval m where
-  throwEvalError :: EvalError -> m a
+class Monad m => MonadVar m where
   getVar :: Var -> m Val
+
+class (MonadCast m, MonadBounded m, MonadVar m) => MonadEval m where
+  throwEvalError :: EvalError -> m a
 
 newtype Evaled (h :: AHyperType) = Evaled {getEvaled :: EvaledType (GetHyperType h)}
 
