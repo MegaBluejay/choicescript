@@ -1,10 +1,12 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module AST (module AST.Expr, module AST) where
 
+import Control.Lens hiding (Simple)
 import Data.ByteString (ByteString)
 import Data.List.NonEmpty (NonEmpty)
 import GHC.Generics
@@ -13,7 +15,6 @@ import Hyper.Class.Recursive
 
 import AST.Expr
 import AST.TH
-import Control.Lens (Wrapped)
 
 data Line cmd e (h :: AHyperType)
   = EmptyLine
@@ -24,12 +25,12 @@ data Line cmd e (h :: AHyperType)
 data PCommand sim e h
   = PSimple (sim e)
   | PIf (If sim e h)
-  | PChoice ChoiceMode (NonEmpty (Option (PBody sim e) e h))
+  | PChoice ChoiceMode (NonEmpty (POption sim e h))
   deriving (Generic)
 
-data CCommand sim e h
+data CCommand sim e (h :: AHyperType)
   = CSimple (sim e)
-  | CChoice (NonEmpty (Option (Const Int) e h))
+  | CChoice (NonEmpty (COption e))
   | JumpUnless (e # Expr) Pos
   deriving (Generic)
 
@@ -88,14 +89,25 @@ data SimpleStartup e
 data ChoiceMode = ChoiceMode | FakeChoiceMode
   deriving (Generic, Eq, Ord, Show)
 
-data Option body e (h :: AHyperType) = Option
+data POption sim e (h :: AHyperType) = POption
   { _optionId :: Int
   , _reuseMods :: [ReuseMod]
   , _ifMods :: [IfMod e]
   , _optionText :: Str # e
-  , _optionBody :: body h
+  , _optionBody :: PBody sim e h
   }
   deriving (Generic)
+
+data COption e = COption
+  { _optionId :: Int
+  , _hideReuse :: Bool
+  , _disableReuse :: Bool
+  , _allowReuse :: Bool
+  , _ifMod :: Maybe (e # Expr)
+  , _selectableIf :: Maybe (e # Expr)
+  , _optionText :: Str # e
+  , _loc :: Pos
+  }
 
 data ReuseMod
   = HideReuseMod
@@ -153,7 +165,10 @@ instance Wrapped SceneName
 instance Wrapped Achievement
 instance Wrapped Pos
 
-makeAll [''Line, ''PCommand, ''CCommand, ''CLine, ''PBody, ''If, ''Else, ''Option]
+makeAll [''Line, ''PCommand, ''CCommand, ''CLine, ''PBody, ''If, ''Else, ''POption]
+
+makeFieldsNoPrefix ''POption
+makeFieldsNoPrefix ''COption
 
 instance RNodes (CLine sim e)
 instance (c (CLine sim e)) => Recursively c (CLine sim e)

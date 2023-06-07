@@ -4,14 +4,19 @@
 
 module Run (module Run) where
 
+import Control.Lens
 import Control.Monad.Reader
 import Data.ByteString (ByteString)
+import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty qualified as NE
+import Data.Maybe
 import Hyper
 
 import AST
 import Eval
 
 data RunError
+  = NoOptions
 
 class (MonadCast m, MonadBounded m) => MonadRun m where
   throwRunError :: RunError -> m a
@@ -25,7 +30,9 @@ class (MonadCast m, MonadBounded m) => MonadRun m where
   jumpPos :: Pos -> m ()
 
   optionUsed :: Int -> m Bool
-  hideReuse :: m Bool
+  globalHideReuse :: m Bool
+
+  choice :: NonEmpty OutOption -> m ()
 
 class RunnableSimple sim where
   runSimple :: MonadRun m => sim (Annotated Int) -> m ()
@@ -41,7 +48,11 @@ runLine (Command cmd) = runCommand cmd
 
 runCommand :: (MonadRun m, RunnableSimple sim) => CCommand sim (Annotated Int) # h -> m ()
 runCommand (CSimple sim) = runSimple sim
-runCommand (CChoice opts) = undefined
+runCommand (CChoice opts) = do
+  opts' <- catMaybes . NE.toList <$> mapM toOutOption opts
+  case opts' of
+    [] -> throwRunError NoOptions
+    _ -> choice $ NE.fromList opts'
 runCommand (JumpUnless e pos) = do
   val <- runTopEval e
   b <- asBool val
@@ -50,10 +61,16 @@ runCommand (JumpUnless e pos) = do
 data OutOption = OutOption
   { _selectable :: Bool
   , _text :: ByteString
-  , _pos :: Pos
+  , _loc :: Pos
   }
 
-toOutOption :: MonadRun m => Option (Const Pos) (Annotated Int) # h -> m (Maybe OutOption)
+toOutOption :: MonadRun m => COption (Annotated Int) -> m (Maybe OutOption)
 toOutOption opt = do
-  globalHR <- hideReuse
-  undefined
+  globalHR <- globalHideReuse
+  isUsed <- optionUsed $ opt ^. optionId
+  ifOk <- maybe (pure True) (runTopEval >=> asBool) (opt ^. ifMod)
+  sifOk <- maybe (pure True) (runTopEval >=> asBool) (opt ^. selectableIf)
+  let hide = (isUsed && (globalHR && not (opt ^. allowReuse) || opt ^. hideReuse)) || not ifOk
+      gray = (isUsed && (opt ^. disableReuse)) || not sifOk
+  txt <- runTopEval $ opt ^. optionText
+  pure $ if hide then Nothing else Just $ OutOption (not gray) txt (opt ^. loc)
