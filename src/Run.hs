@@ -25,6 +25,12 @@ data RunError
   | VarAlreadyExists Var
   | TempNotFound Var
   | LabelNotFound Label
+  | SceneNotFound SceneName
+  | NoParams
+  | NoSub
+  | AllUsed
+  | AchNotFound Achievement
+  | EvalError (Int, EvalError)
 
 class Monad m => InnerRun m where
   output :: ByteString -> m ()
@@ -74,7 +80,8 @@ class (InnerRun m, MonadCast m, MonadBounded m, MonadVar m) => MonadRun m where
   gotoRandomScene :: NonEmpty SceneName -> m ()
 
   achieve :: Achievement -> m ()
-  checkAchievements :: m ()
+
+  nextLine :: m ()
 
 class MonadRun m => MonadRunStartup m where
   createVar :: Var -> Val -> m ()
@@ -91,8 +98,8 @@ runCLine (CLoc line) = runLine line
 runCLine (JumpOut mcm pos) = jumpOut mcm pos
 
 runLine :: (MonadRun m, RunnableSimple sim m) => Line (CCommand sim) (Annotated Int) # h -> m ()
-runLine EmptyLine = output "\n"
-runLine (Text s) = runTopEval s >>= output
+runLine EmptyLine = output "\n" *> nextLine
+runLine (Text s) = (runTopEval s >>= output) *> nextLine
 runLine (Command cmd) = runCommand cmd
 
 runCommand :: (MonadRun m, RunnableSimple sim m) => CCommand sim (Annotated Int) # h -> m ()
@@ -105,7 +112,7 @@ runCommand (CChoice opts) = do
 runCommand (JumpUnless e pos) = do
   val <- runTopEval e
   b <- asBool val
-  unless b $ jumpPos pos
+  if b then nextLine else jumpPos pos
 
 data OutOption = OutOption
   { _selectable :: Bool
@@ -125,57 +132,62 @@ toOutOption opt = do
   pure $ if hide then Nothing else Just $ OutOption (not gray) txt (opt ^. loc)
 
 instance MonadRun m => RunnableSimple Simple m where
-  runSimple HideReuse = setGlobalHideReuse
-  runSimple (Temp v e) = runTopEval e >>= tempVar v
+  runSimple HideReuse = setGlobalHideReuse *> nextLine
+  runSimple (Temp v e) = (runTopEval e >>= tempVar v) *> nextLine
   runSimple (Set target se) = do
     var <- runTopEval target
     val <- runSetExpr var se
     setVar var val
-  runSimple (Delete var) = deleteVar var
+    nextLine
+  runSimple (Delete var) = deleteVar var *> nextLine
   runSimple (InputNumber target lo hi) = do
     var <- runTopEval target
     inputNumber var lo hi
-  runSimple (InputText target) = runTopEval target >>= inputText
-  runSimple (Print target) = runTopEval target >>= getVar >>= output . printVal
+    nextLine
+  runSimple (InputText target) = (runTopEval target >>= inputText) *> nextLine
+  runSimple (Print target) = (runTopEval target >>= getVar >>= output . printVal) *> nextLine
   runSimple (Rand target lo hi) = do
     var <- runTopEval target
     n <- rand lo hi
     setVar var $ IntVal n
+    nextLine
   runSimple (Goto target) = runTopEval target >>= goto
   runSimple (GotoScene scene mtarget) = mapM runTopEval mtarget >>= gotoScene scene
   runSimple (Gosub (SubArgs target es)) = do
     label <- runTopEval target
     vals <- mapM runTopEval es
+    nextLine
     goSub label vals
   runSimple (GosubScene scene margs) = do
     args <- forM margs $ \(SubArgs target es) -> do
       label <- runTopEval target
       vals <- mapM runTopEval es
       pure (label, vals)
+    nextLine
     goSubScene scene args
   runSimple (Params targets) = do
     vars <- mapM runTopEval targets
     vals <- params
     sequence_ (NE.zipWith setVar vars vals)
+    nextLine
   runSimple Return = return'
   runSimple (GotoRandomScene scenes) = gotoRandomScene scenes
   runSimple (Finish mstr) =
-    maybe (pure "Next Chapter") runTopEval mstr >>= finish
-  runSimple LineBreak = output "\n"
+    (maybe (pure "Next Chapter") runTopEval mstr >>= finish) *> nextLine
+  runSimple LineBreak = output "\n" *> nextLine
   runSimple (PageBreak mstr) =
-    maybe (pure "Next") runTopEval mstr >>= pageBreak
-  runSimple (StatChart stats) = statChart stats
-  runSimple (Achieve ach) = achieve ach
-  runSimple CheckAchievements = checkAchievements
+    (maybe (pure "Next") runTopEval mstr >>= pageBreak) *> nextLine
+  runSimple (StatChart stats) = statChart stats *> nextLine
+  runSimple (Achieve ach) = achieve ach *> nextLine
   runSimple Ending = ending
 
 instance MonadRunStartup m => RunnableSimple SimpleStartup m where
   runSimple (NormalSimple normal) = runSimple normal
-  runSimple (Create var e) = runTopEval e >>= createVar var
-  runSimple (SceneLst scenes) = sceneList scenes
-  runSimple (Title str) = runTopEval str >>= title
-  runSimple (Author str) = runTopEval str >>= author
-  runSimple (Achievement ach achData) = achievement ach achData
+  runSimple (Create var e) = (runTopEval e >>= createVar var) *> nextLine
+  runSimple (SceneLst scenes) = sceneList scenes *> nextLine
+  runSimple (Title str) = (runTopEval str >>= title) *> nextLine
+  runSimple (Author str) = (runTopEval str >>= author) *> nextLine
+  runSimple (Achievement ach achData) = achievement ach achData *> nextLine
 
 runSetExpr :: MonadRun m => Var -> SetExpr (Annotated Int) -> m Val
 runSetExpr _ (NormalSet e) = runTopEval e

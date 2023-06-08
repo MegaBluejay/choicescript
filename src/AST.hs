@@ -74,7 +74,6 @@ data Simple e
   | PageBreak (Maybe (Str # e))
   | StatChart (NonEmpty Stat)
   | Achieve Achievement
-  | CheckAchievements
   | Ending
   deriving (Generic)
 
@@ -153,10 +152,10 @@ newtype Label = L {getL :: ByteString}
   deriving (Show, Eq, Generic, Hashable)
 
 newtype SceneName = SN {getSN :: ByteString}
-  deriving (Show, Generic)
+  deriving (Show, Generic, Eq, Hashable)
 
 newtype Achievement = A {getA :: ByteString}
-  deriving (Show, Generic)
+  deriving (Show, Generic, Eq, Hashable)
 
 newtype Pos = P {getP :: Int}
   deriving (Show, Eq, Generic)
