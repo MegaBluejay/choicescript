@@ -15,6 +15,7 @@ import Hyper.Class.Recursive
 
 import AST.Expr
 import AST.TH
+import Data.Hashable (Hashable)
 
 data Line cmd e (h :: AHyperType)
   = EmptyLine
@@ -149,7 +150,7 @@ data Stat
   deriving (Show, Generic)
 
 newtype Label = L {getL :: ByteString}
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Generic, Hashable)
 
 newtype SceneName = SN {getSN :: ByteString}
   deriving (Show, Generic)

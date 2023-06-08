@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# OPTIONS_GHC -Wno-redundant-constraints #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Run (module Run) where
 
@@ -17,13 +17,39 @@ import Eval
 
 data RunError
   = NoOptions
+  | RunTypeError TypeError
+  | RunOutOfBounds OutOfBounds
+  | RunVarNotFound Var
+  | NoImp
+  | RunEvalError (Int, EvalError)
+  | VarAlreadyExists Var
+  | TempNotFound Var
+  | LabelNotFound Label
 
-class (MonadCast m, MonadBounded m, MonadVar m) => MonadRun m where
+class Monad m => InnerRun m where
+  output :: ByteString -> m ()
+  choice :: NonEmpty OutOption -> m ()
+  inputNumber :: Var -> Int -> Int -> m ()
+  inputText :: Var -> m ()
+  finish :: ByteString -> m ()
+  pageBreak :: ByteString -> m ()
+  ending :: m ()
+  statChart :: NonEmpty Stat -> m ()
+
+instance (MonadTrans t, Monad (t m), InnerRun m) => InnerRun (t m) where
+  output = lift . output
+  choice = lift . choice
+  inputNumber v lo hi = lift $ inputNumber v lo hi
+  inputText = lift . inputText
+  finish = lift . finish
+  pageBreak = lift . pageBreak
+  ending = lift ending
+  statChart = lift . statChart
+
+class (InnerRun m, MonadCast m, MonadBounded m, MonadVar m) => MonadRun m where
   throwRunError :: RunError -> m a
 
   jumpOut :: Maybe ChoiceMode -> Pos -> m ()
-
-  output :: ByteString -> m ()
 
   runTopEval :: TopEvalable a => a -> m (EvaledType (TopHyper a))
 
@@ -33,14 +59,10 @@ class (MonadCast m, MonadBounded m, MonadVar m) => MonadRun m where
   getGlobalHideReuse :: m Bool
   setGlobalHideReuse :: m ()
 
-  choice :: NonEmpty OutOption -> m ()
-
   tempVar :: Var -> Val -> m ()
   setVar :: Var -> Val -> m ()
   deleteVar :: Var -> m ()
 
-  inputNumber :: Var -> Int -> Int -> m ()
-  inputText :: Var -> m ()
   rand :: Int -> Int -> m Int
 
   goto :: Label -> m ()
@@ -50,12 +72,6 @@ class (MonadCast m, MonadBounded m, MonadVar m) => MonadRun m where
   params :: m (NonEmpty Val)
   return' :: m ()
   gotoRandomScene :: NonEmpty SceneName -> m ()
-
-  finish :: ByteString -> m ()
-  pageBreak :: ByteString -> m ()
-  ending :: m ()
-
-  statChart :: NonEmpty Stat -> m ()
 
   achieve :: Achievement -> m ()
   checkAchievements :: m ()

@@ -83,7 +83,12 @@ instance MBounded (NonEmpty a) where
       else Right $ OutOfBounds (NE.length l) i
 
 class Monad m => MonadBounded m where
-  checkBounds :: MBounded t => t -> Index t -> m (Item t)
+  throwBoundsError :: OutOfBounds -> m a
+
+checkBounds :: (MonadBounded m, MBounded t) => t -> Index t -> m (Item t)
+checkBounds t i = case getBounded t i of
+  Left item -> pure item
+  Right err -> throwBoundsError err
 
 class Monad m => MonadVar m where
   getVar :: Var -> m Val

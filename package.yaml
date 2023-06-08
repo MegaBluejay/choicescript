@@ -31,3 +31,7 @@ library:
     - template-haskell
     - mtl
     - lens
+    - unordered-containers
+    - containers
+    - hashable
+    - random

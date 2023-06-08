@@ -15,6 +15,7 @@ library
       AST.TH
       Eval
       Run
+      Runner
   other-modules:
       Paths_choice2
   hs-source-dirs:
@@ -27,9 +28,13 @@ library
   build-depends:
       base >=4.7 && <5
     , bytestring
+    , containers
     , generic-constraints
+    , hashable
     , hypertypes
     , lens
     , mtl
+    , random
     , template-haskell
+    , unordered-containers
   default-language: GHC2021

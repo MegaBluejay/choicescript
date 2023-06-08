@@ -6,6 +6,7 @@ module AST.Expr (module AST.Expr) where
 
 import Control.Lens
 import Data.ByteString (ByteString)
+import Data.Hashable (Hashable)
 import Data.List.NonEmpty (NonEmpty)
 import GHC.Generics
 import Hyper
@@ -75,7 +76,7 @@ data Fun
   deriving (Show, Generic)
 
 newtype Var = V {getV :: ByteString}
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Generic, Hashable)
 
 instance Wrapped Var
 
