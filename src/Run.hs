@@ -7,6 +7,8 @@ module Run (module Run) where
 import Control.Lens hiding (Simple, op)
 import Control.Monad.Reader
 import Data.ByteString (ByteString)
+import Data.ByteString.Char8 qualified as C
+import Data.Char
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Maybe
@@ -32,25 +34,53 @@ data RunError
   | AchNotFound Achievement
   | EvalError (Int, EvalError)
 
+data OutStat
+  = OutTextStat ByteString ByteString
+  | OutPercentStat ByteString Int
+  | OutOpposedStat ByteString ByteString Int
+
 class Monad m => InnerRun m where
   output :: ByteString -> m ()
-  choice :: NonEmpty OutOption -> m ()
-  inputNumber :: Var -> Int -> Int -> m ()
-  inputText :: Var -> m ()
+  choice :: NonEmpty OutOption -> m OutOption
+  inputNumber :: Int -> Int -> m Int
+  inputText :: m ByteString
   finish :: ByteString -> m ()
   pageBreak :: ByteString -> m ()
   ending :: m ()
-  statChart :: NonEmpty Stat -> m ()
+  statChart :: NonEmpty OutStat -> m ()
 
 instance (MonadTrans t, Monad (t m), InnerRun m) => InnerRun (t m) where
   output = lift . output
   choice = lift . choice
-  inputNumber v lo hi = lift $ inputNumber v lo hi
-  inputText = lift . inputText
+  inputNumber = lift .: inputNumber
+  inputText = lift inputText
   finish = lift . finish
   pageBreak = lift . pageBreak
   ending = lift ending
   statChart = lift . statChart
+
+toOutHelper :: MonadRun m => ByteString -> m Val
+toOutHelper = getVar . V . C.map toLower
+
+toOutNamedStat :: MonadRun m => NamedStat -> m (ByteString, Int)
+toOutNamedStat (JustVar v) = do
+  val <- toOutHelper v
+  n <- asInt val
+  pure (v, n)
+toOutNamedStat (Named v name) = do
+  val <- getVar v
+  n <- asInt val
+  pure (name, n)
+
+toOutStat :: MonadRun m => Stat -> m OutStat
+toOutStat (TextStat t) = do
+  let var = V $ C.map toLower t
+  val <- getVar var
+  pure $ OutTextStat t (printVal val)
+toOutStat (PercentStat ns) = uncurry OutPercentStat <$> toOutNamedStat ns
+toOutStat (OpposedStat ns right) = do
+  (left, n) <- toOutNamedStat ns
+  pure $ OutOpposedStat left right n
 
 class (InnerRun m, MonadCast m, MonadBounded m, MonadVar m) => MonadRun m where
   throwRunError :: RunError -> m a
@@ -108,7 +138,9 @@ runCommand (CChoice opts) = do
   opts' <- catMaybes . NE.toList <$> mapM toOutOption opts
   case opts' of
     [] -> throwRunError NoOptions
-    _ -> choice $ NE.fromList opts'
+    _ -> do
+      OutOption _ _ pos <- choice $ NE.fromList opts'
+      jumpPos pos
 runCommand (JumpUnless e pos) = do
   val <- runTopEval e
   b <- asBool val
@@ -142,9 +174,14 @@ instance MonadRun m => RunnableSimple Simple m where
   runSimple (Delete var) = deleteVar var *> nextLine
   runSimple (InputNumber target lo hi) = do
     var <- runTopEval target
-    inputNumber var lo hi
+    n <- inputNumber lo hi
+    setVar var $ IntVal n
     nextLine
-  runSimple (InputText target) = (runTopEval target >>= inputText) *> nextLine
+  runSimple (InputText target) = do
+    var <- runTopEval target
+    txt <- inputText
+    setVar var $ StrVal txt
+    nextLine
   runSimple (Print target) = (runTopEval target >>= getVar >>= output . printVal) *> nextLine
   runSimple (Rand target lo hi) = do
     var <- runTopEval target
@@ -177,7 +214,7 @@ instance MonadRun m => RunnableSimple Simple m where
   runSimple LineBreak = output "\n" *> nextLine
   runSimple (PageBreak mstr) =
     (maybe (pure "Next") runTopEval mstr >>= pageBreak) *> nextLine
-  runSimple (StatChart stats) = statChart stats *> nextLine
+  runSimple (StatChart stats) = (mapM toOutStat stats >>= statChart) *> nextLine
   runSimple (Achieve ach) = achieve ach *> nextLine
   runSimple Ending = ending
 
