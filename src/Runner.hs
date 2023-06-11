@@ -20,6 +20,7 @@ import System.Random
 
 import AST
 import Eval
+import InnerRunner
 import Run
 
 data RunCtx = RunCtx
@@ -230,3 +231,6 @@ instance InnerRun m => MonadRun (RunT m) where
   pageBreak t = showButton t *> nextLine
 throwScopedError :: (MonadScoped sc m, MonadError (sc, e) m) => e -> m a
 throwScopedError e = getScope >>= throwError . (,e)
+
+evalFullRun :: (Monad m) => ReaderT RunCtx (StateT RunState (ExceptT (Int, RunError) (InnerRunT m))) a -> RunCtx -> RunState -> InnerRunHandler m -> [PrintItem] -> m (Either (Int, RunError) a)
+evalFullRun x ctx st h = evalStateT (runInnerRunT (runExceptT $ evalStateT (runReaderT x ctx) st) h)
