@@ -35,3 +35,4 @@ library:
     - containers
     - hashable
     - random
+    - transformers

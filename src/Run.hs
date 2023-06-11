@@ -44,20 +44,18 @@ class Monad m => InnerRun m where
   choice :: NonEmpty OutOption -> m OutOption
   inputNumber :: Int -> Int -> m Int
   inputText :: m ByteString
-  finish :: ByteString -> m ()
-  pageBreak :: ByteString -> m ()
-  ending :: m ()
   statChart :: NonEmpty OutStat -> m ()
+  ending :: m ()
+  showButton :: ByteString -> m ()
 
 instance (MonadTrans t, Monad (t m), InnerRun m) => InnerRun (t m) where
   output = lift . output
   choice = lift . choice
   inputNumber = lift .: inputNumber
   inputText = lift inputText
-  finish = lift . finish
-  pageBreak = lift . pageBreak
-  ending = lift ending
   statChart = lift . statChart
+  ending = lift ending
+  showButton = lift . showButton
 
 toOutHelper :: MonadRun m => ByteString -> m Val
 toOutHelper = getVar . V . C.map toLower
@@ -83,6 +81,9 @@ toOutStat (OpposedStat ns right) = do
   pure $ OutOpposedStat left right n
 
 class (InnerRun m, MonadCast m, MonadBounded m, MonadVar m) => MonadRun m where
+  finish :: ByteString -> m ()
+  pageBreak :: ByteString -> m ()
+
   throwRunError :: RunError -> m a
 
   jumpOut :: Maybe ChoiceMode -> Pos -> m ()

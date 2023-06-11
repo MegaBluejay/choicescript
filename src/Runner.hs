@@ -52,6 +52,7 @@ data RunState = RunState
   , _stack :: NonEmpty SceneState
   , _usedRandomScenes :: HashSet SceneName
   , _achs :: HashMap Achievement (AchData (Annotated Int), Bool)
+  , _theSceneList :: [SceneName]
   }
 
 makeFieldsNoPrefix ''RunCtx
@@ -217,5 +218,15 @@ instance InnerRun m => MonadRun (RunT m) where
       Just (ad, _) -> achs . at ach .= Just (ad, True)
       Nothing -> throwRunError $ AchNotFound ach
 
+  finish t = do
+    showButton t
+    sl <- use theSceneList
+    case sl of
+      [] -> ending
+      (s : ss) -> do
+        theSceneList .= ss
+        gotoScene s Nothing
+
+  pageBreak t = showButton t *> nextLine
 throwScopedError :: (MonadScoped sc m, MonadError (sc, e) m) => e -> m a
 throwScopedError e = getScope >>= throwError . (,e)

@@ -14,6 +14,7 @@ library
       AST.Expr
       AST.TH
       Eval
+      InnerRunner
       Run
       Runner
   other-modules:
@@ -36,5 +37,6 @@ library
     , mtl
     , random
     , template-haskell
+    , transformers
     , unordered-containers
   default-language: GHC2021
