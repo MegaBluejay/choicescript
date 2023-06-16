@@ -1,4 +1,0 @@
-*choice
-  *if x
-    *hide_reuse
-      #
